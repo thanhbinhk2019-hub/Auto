@@ -24,7 +24,8 @@ local CFG = {
 	ARRIVAL_DIST = 5.5,
 	TELEPORT_AWAY_DIST = 25,
 	WALK_TIMEOUT = 16,
-	MATCH_SCAN_DELAY = 1.5,
+	LOBBY_SCAN_DELAY = 0.8,     -- Đợi UI khu Culling hiện lên sau khi đi bộ tới tọa độ cũ
+	MATCH_VERIFY_DELAY = 1.5,   -- Đợi load vào trận rồi kiểm tra màn khác để tự rejoin
 	START_RETRY_DELAY = 2.5,
 	REJOIN_COOLDOWN = 6.0,
 	LOOP_TICK = 0.35,
@@ -37,6 +38,11 @@ local CFG = {
 	upWait = 0.65,
 	retryWait = 1.4,
 	moneyTimeout = 3.5,
+
+	-- AI né trùng vị trí & đặt bằng được mới ngừng
+	minTowerDist = 1.8,
+	aiStep = 1.35,
+	aiMaxRing = 6,
 }
 
 _G.CullingTestState = _G.CullingTestState or {
@@ -178,7 +184,8 @@ local function normalizeStageKey(rawName)
 	return clean ~= "" and clean or nil
 end
 
-local function detectStageInMatch()
+-- Quét tên màn (ColonyName / Kagoshima 1 / Kagoshima 3 / ...) ở sảnh hoặc sau khi đã vào trận
+local function detectStageInfo()
 	local stageRaw = nil
 	local livesLeft = nil
 
@@ -353,7 +360,14 @@ local function triggerRejoin()
 	end)
 end
 
--- ================= 4. LOGIC CHIẾN ĐẤU KAGOSHIMA 1 =================
+-- ================= 4. LOGIC CHIẾN ĐẤU KAGOSHIMA 1 (CHỐNG TRÙNG VỊ TRÍ & ĐẶT BẰNG ĐƯỢC) =================
+local aiMem = { badPos = {}, bestDirById = {} }
+
+local function posKey(cf)
+	local p = cf.Position
+	return string.format("%.1f_%.1f_%.1f", p.X, p.Y, p.Z)
+end
+
 local function moneyDropped(before)
 	if before == nil then return false end
 	local dl = os.clock() + CFG.moneyTimeout
@@ -368,6 +382,71 @@ end
 local function allTowers()
 	local f = workspace:FindFirstChild("Towers")
 	return f and f:GetChildren() or {}
+end
+
+local function getTowerPos(obj)
+	if not obj then return nil end
+	if obj:IsA("Model") then
+		local ok, cf = pcall(function() return obj:GetPivot() end)
+		if ok and cf then return cf.Position end
+	elseif obj:IsA("BasePart") then
+		return obj.Position
+	end
+	local hrp = obj:FindFirstChildWhichIsA("BasePart", true)
+	return hrp and hrp.Position or nil
+end
+
+local function isPosNearTower(pos)
+	for _, t in ipairs(allTowers()) do
+		local tp = getTowerPos(t)
+		if tp and (Vector3.new(tp.X, pos.Y, tp.Z) - Vector3.new(pos.X, pos.Y, pos.Z)).Magnitude < CFG.minTowerDist then
+			return true
+		end
+	end
+	return false
+end
+
+local DIRS = { {1,0}, {-1,0}, {0,1}, {0,-1}, {1,1}, {1,-1}, {-1,1}, {-1,-1} }
+
+local function pickNonOverlappingCf(baseCf, towerId, attemptIdx)
+	local _, rx, ry, rz = baseCf:ToEulerAnglesXYZ()
+	local p = baseCf.Position
+
+	if attemptIdx <= 1 and not isPosNearTower(p) and not aiMem.badPos[posKey(baseCf)] then
+		return baseCf, nil
+	end
+
+	local list = {}
+	local fav = aiMem.bestDirById[tostring(towerId or "")]
+	if fav then table.insert(list, fav) end
+	for _, d in ipairs(DIRS) do
+		if not fav or d[1] ~= fav[1] or d[2] ~= fav[2] then
+			table.insert(list, d)
+		end
+	end
+
+	local fallbackCand, fallbackDir
+	for ring = 1, CFG.aiMaxRing do
+		for _, d in ipairs(list) do
+			local cand = CFrame.new(p.X + d[1] * ring * CFG.aiStep, p.Y, p.Z + d[2] * ring * CFG.aiStep) * CFrame.Angles(rx, ry, rz)
+			if not aiMem.badPos[posKey(cand)] then
+				if not fallbackCand then
+					fallbackCand, fallbackDir = cand, d
+				end
+				if not isPosNearTower(cand.Position) then
+					return cand, d
+				end
+			end
+		end
+	end
+
+	if fallbackCand then
+		return fallbackCand, fallbackDir
+	end
+
+	local extraRing = CFG.aiMaxRing + ((attemptIdx - 1) % 4) + 1
+	local d = list[((attemptIdx - 1) % #list) + 1]
+	return CFrame.new(p.X + d[1] * extraRing * CFG.aiStep, p.Y, p.Z + d[2] * extraRing * CFG.aiStep) * CFrame.Angles(rx, ry, rz), d
 end
 
 local function findTowerByName(name)
@@ -412,41 +491,53 @@ local function fireVoteSkip()
 	end
 end
 
-local function trySpawnTower(towerId, cf, setActionFn, tag)
-	local m0 = getCurrentMoney()
-	local prev = {}
-	for _, t in ipairs(allTowers()) do prev[t] = true end
+local function spawnUntilSuccess(towerId, baseCf, setActionFn, tag, activeRef)
+	local tries = 0
+	while activeRef() and detectEnvironment() == "IN_MATCH" do
+		tries += 1
+		local targetCf, usedDir = pickNonOverlappingCf(baseCf, towerId, tries)
+		local m0 = getCurrentMoney()
+		local prev = {}
+		for _, t in ipairs(allTowers()) do prev[t] = true end
 
-	local ok, res = pcall(function()
-		return Functions.SpawnNewTower:InvokeServer(towerId, cf)
-	end)
+		local ok, res = pcall(function()
+			return Functions.SpawnNewTower:InvokeServer(towerId, targetCf)
+		end)
 
-	local drop = moneyDropped(m0)
-	local spawned = (typeof(res) == "Instance")
-	if not spawned then
-		for _, t in ipairs(allTowers()) do
-			if not prev[t] then
-				spawned = true
-				break
+		local drop = moneyDropped(m0)
+		local spawned = (typeof(res) == "Instance")
+		if not spawned then
+			for _, t in ipairs(allTowers()) do
+				if not prev[t] then
+					spawned = true
+					break
+				end
 			end
 		end
-	end
 
-	if setActionFn then
-		setActionFn(string.format("%s (-tiền=%s | đặt=%s)", tag, tostring(drop), tostring(ok and (res ~= false or spawned))))
-	end
+		local shifted = (targetCf.Position - baseCf.Position).Magnitude > 0.05
+		if setActionFn then
+			setActionFn(string.format("%s [#%d%s | -tiền=%s | KHÔNG BỎ]", tag, tries, shifted and " | ĐỔI VỊ TRÍ" or "", tostring(drop)))
+		end
 
-	return ok and res ~= false and (drop or spawned or m0 == nil)
-end
+		if ok and res ~= false and (drop or spawned) then
+			if usedDir then
+				aiMem.bestDirById[tostring(towerId or "")] = usedDir
+			end
+			task.wait(CFG.spawnWait)
+			return true
+		end
 
-local function tryClickTower(towerId, cf, setActionFn, tag)
-	local ok, res = pcall(function()
-		return Functions.SpawnNewTower:InvokeServer(towerId, cf)
-	end)
-	if setActionFn then
-		setActionFn(string.format("%s (Click=%s)", tag, tostring(ok and res ~= false)))
+		if m0 == nil or m0 >= 100 then
+			aiMem.badPos[posKey(targetCf)] = true
+		end
+		if tries % 16 == 0 then
+			aiMem.badPos = {}
+		end
+
+		task.wait(CFG.retryWait)
 	end
-	return ok and res ~= false
+	return false
 end
 
 local function tryUpgradeTower(targetName, setActionFn, tag)
@@ -474,12 +565,9 @@ end
 local KAGOSHIMA_1_STEPS = {
 	{ kind = "spawn", tag = "#2 Đặt", towerId = "3a4f9c5c-dcfc-46aa-ad1e-be37e88c9c66", cf = CFrame.new(4.864310264587402, 47.32311248779297, -121.51627349853516) * CFrame.Angles(-3.1415927410125732, -8.742277657347586e-08, -3.1415927410125732) },
 	{ kind = "spawn", tag = "#3 Đặt", towerId = "be8f9440-55fc-4aa6-9317-0b5581a076f6", cf = CFrame.new(-25.062589645385742, 47.15073776245117, -107.02923583984375) * CFrame.Angles(-3.1415927410125732, -8.742277657347586e-08, -3.1415927410125732) },
-	{ kind = "click", tag = "#4 Click", towerId = "be8f9440-55fc-4aa6-9317-0b5581a076f6", cf = CFrame.new(-25.062589645385742, 47.15073776245117, -107.02923583984375) * CFrame.Angles(-3.1415927410125732, -8.742277657347586e-08, -3.1415927410125732) },
 	{ kind = "spawn", tag = "#5 Đặt", towerId = "be8f9440-55fc-4aa6-9317-0b5581a076f6", cf = CFrame.new(-26.276447296142578, 47.150733947753906, -111.41389465332031) * CFrame.Angles(-3.1415927410125732, -8.742277657347586e-08, -3.1415927410125732) },
-	{ kind = "spawn", tag = "#6 Đặt", towerId = "be8f9440-55fc-4aa6-9317-0b5581a076f6", cf = CFrame.new(-26.276447296142578, 47.150733947753906, -111.41389465332031) * CFrame.Angles(-3.1415927410125732, -8.742277657347586e-08, -3.1415927410125732) },
 	{ kind = "upgrade", tag = "#7 Nâng SorcererAgent", targetName = "SorcererAgent" },
 	{ kind = "spawn", tag = "#8 Đặt", towerId = "be8f9440-55fc-4aa6-9317-0b5581a076f6", cf = CFrame.new(-15.050935745239258, 47.15073776245117, -108.41059875488281) * CFrame.Angles(-3.1415927410125732, -8.742277657347586e-08, -3.1415927410125732) },
-	{ kind = "spawn", tag = "#9 Đặt", towerId = "be8f9440-55fc-4aa6-9317-0b5581a076f6", cf = CFrame.new(-15.050935745239258, 47.15073776245117, -108.41059875488281) * CFrame.Angles(-3.1415927410125732, -8.742277657347586e-08, -3.1415927410125732) },
 	{ kind = "upgrade", tag = "#10 Nâng SorcererAgent", targetName = "SorcererAgent" },
 	{ kind = "upgrade", tag = "#11 Nâng SorcererAgent", targetName = "SorcererAgent" },
 	{ kind = "spawn", tag = "#12 Đặt", towerId = "348f2cd1-e2e9-48c8-a13b-589f09bc0654", cf = CFrame.new(22.122488021850586, 47.150047302246094, -121.02806091308594) * CFrame.Angles(-3.1415927410125732, -8.742277657347586e-08, -3.1415927410125732) },
@@ -505,11 +593,12 @@ local AUTO_TARGETS_FROM_WAVE_7 = {
 	{ kind = "upgrade", tag = "Auto W7+ Nâng SorcererAgent3", targetName = "SorcererAgent3" },
 	{ kind = "upgrade", tag = "Auto W7+ Nâng SorcererAgent2", targetName = "SorcererAgent2" },
 	{ kind = "upgrade", tag = "Auto W7+ Nâng SorcererAgent", targetName = "SorcererAgent" },
-	{ kind = "spawn", tag = "Auto W7+ Đặt #18", towerId = "a7976e77-c58a-44c6-bde9-d9710fd14ac2", cf = CFrame.new(26.937042236328125, 47.16230010986328, -117.86810302734375) * CFrame.Angles(-3.1415927410125732, -8.742277657347586e-08, -3.1415927410125732) },
-	{ kind = "spawn", tag = "Auto W7+ Đặt #12", towerId = "348f2cd1-e2e9-48c8-a13b-589f09bc0654", cf = CFrame.new(22.122488021850586, 47.150047302246094, -121.02806091308594) * CFrame.Angles(-3.1415927410125732, -8.742277657347586e-08, -3.1415927410125732) },
 }
 
 local function runKagoshima1(setActionFn, activeRef)
+	aiMem.badPos = {}
+	aiMem.bestDirById = {}
+
 	-- Đợi 3 giây load xong mới chạy
 	local t0 = os.clock()
 	while activeRef() and detectEnvironment() == "IN_MATCH" and (os.clock() - t0) < CFG.startupWait do
@@ -520,27 +609,14 @@ local function runKagoshima1(setActionFn, activeRef)
 
 	if not activeRef() or detectEnvironment() ~= "IN_MATCH" then return end
 
-	-- Chọn modifiers mở màn
 	chooseModifiersOnce()
-	setActionFn("Kagoshima 1: Đã chọn Modifier, chạy chuỗi bước...")
+	setActionFn("Kagoshima 1: Đã chọn Modifier, bắt đầu đặt tháp...")
 
-	-- Chạy chuỗi bước chính của Kagoshima 1
 	for _, step in ipairs(KAGOSHIMA_1_STEPS) do
 		if not activeRef() or detectEnvironment() ~= "IN_MATCH" then return end
 
 		if step.kind == "spawn" then
-			local tries = 0
-			while activeRef() and detectEnvironment() == "IN_MATCH" and tries < 8 do
-				tries += 1
-				if trySpawnTower(step.towerId, step.cf, setActionFn, step.tag .. " #" .. tries) then
-					task.wait(CFG.spawnWait)
-					break
-				end
-				task.wait(CFG.retryWait)
-			end
-		elseif step.kind == "click" then
-			tryClickTower(step.towerId, step.cf, setActionFn, step.tag)
-			task.wait(0.35)
+			spawnUntilSuccess(step.towerId, step.cf, setActionFn, step.tag, activeRef)
 		elseif step.kind == "upgrade" then
 			local tries = 0
 			while activeRef() and detectEnvironment() == "IN_MATCH" and tries < 6 do
@@ -558,7 +634,7 @@ local function runKagoshima1(setActionFn, activeRef)
 		end
 	end
 
-	-- Bắt đầu từ wave 7 -> auto liên tục (nâng cấp + đặt thêm + vote skip)
+	-- Bắt đầu từ wave 7 -> auto liên tục (nâng cấp + vote skip)
 	while activeRef() and detectEnvironment() == "IN_MATCH" do
 		local w = getCurrentWave()
 		if w and w >= CFG.autoStartWave then
@@ -571,9 +647,6 @@ local function runKagoshima1(setActionFn, activeRef)
 				if item.kind == "upgrade" then
 					tryUpgradeTower(item.targetName, setActionFn, item.tag)
 					task.wait(0.25)
-				elseif item.kind == "spawn" then
-					trySpawnTower(item.towerId, item.cf, setActionFn, item.tag)
-					task.wait(0.35)
 				end
 			end
 		else
@@ -685,7 +758,7 @@ stageLbl.TextSize = 12
 stageLbl.TextColor3 = Color3.fromRGB(220, 175, 255)
 stageLbl.TextXAlignment = Enum.TextXAlignment.Left
 stageLbl.TextTruncate = Enum.TextTruncate.AtEnd
-stageLbl.Text = "Màn: Đợi vào trận..."
+stageLbl.Text = "Màn: Chờ tới khu Culling..."
 stageLbl.Parent = menuBox
 
 local actionLbl = Instance.new("TextLabel")
@@ -756,11 +829,13 @@ task.spawn(function()
 	local gate1Passed = false
 	local tp2Done = false
 	local walkToFinalDone = false
+	local arrivedAtWalkGoalAt = nil
+	local lobbyStageVerified = false
 	local isWalkingNow = false
 	local lastInteractTick = 0
 	local lastStartTick = 0
 	local inMatchEnteredAt = nil
-	local matchVerifiedDone = false
+	local matchStageChecked = false
 	local startedMatchKey = nil
 
 	while active do
@@ -769,10 +844,9 @@ task.spawn(function()
 			modeLbl.Text = env == "LOBBY" and "Vị trí: Ở SẢNH" or "Vị trí: TRONG TRẬN"
 
 			if env == "LOBBY" then
-				inMatchEnteredAt = nil
-				matchVerifiedDone = false
 				startedMatchKey = nil
-				stageLbl.Text = "Màn: Đợi vào trận mới quét..."
+				inMatchEnteredAt = nil
+				matchStageChecked = false
 
 				local _, root = getCharacterAndParts()
 				if not root then
@@ -794,6 +868,10 @@ task.spawn(function()
 				end
 
 				if not gate1Passed then
+					lobbyStageVerified = false
+					arrivedAtWalkGoalAt = nil
+					stageLbl.Text = "Màn: Qua cổng 1 & tới tọa độ cũ mới quét..."
+
 					if distGate1 > CFG.ARRIVAL_DIST then
 						if lastInteractTick > 0 and distGate1 >= CFG.TELEPORT_AWAY_DIST then
 							gate1Passed = true
@@ -816,58 +894,50 @@ task.spawn(function()
 							setAction("Đang tìm nút Tương tác tại cổng 1...")
 						end
 					end
+
 				elseif not tp2Done then
+					lobbyStageVerified = false
+					arrivedAtWalkGoalAt = nil
+					stageLbl.Text = "Màn: TP bước 2 & tới tọa độ cũ mới quét..."
+
 					if distTp2 > CFG.ARRIVAL_DIST then
 						setAction(string.format("TP tới vị trí 2 mới (%.1fm)...", distTp2))
 						root.CFrame = CFrame.new(CFG.CULLING_TP2_POS)
 					else
 						tp2Done = true
-						setAction("Đã tới vị trí 2 mới, chuẩn bị đi bộ...")
+						setAction("Đã tới vị trí 2 mới, chuẩn bị đi bộ vào tọa độ cũ...")
 					end
+
 				elseif not walkToFinalDone then
+					lobbyStageVerified = false
+					arrivedAtWalkGoalAt = nil
+					stageLbl.Text = "Màn: Đi vào tọa độ cũ mới quét..."
+
 					if not isWalkingNow then
 						isWalkingNow = true
 						task.spawn(function()
-							local okWalk = walkToPosition(CFG.CULLING_WALK_POS, setAction, "Đi bộ tới vị trí 2 cũ", function() return active end)
+							local okWalk = walkToPosition(CFG.CULLING_WALK_POS, setAction, "Đi bộ vào tọa độ cũ", function() return active end)
 							isWalkingNow = false
 							if okWalk then
 								walkToFinalDone = true
-								setAction("Đã đi bộ tới vị trí 2 cũ!")
+								arrivedAtWalkGoalAt = os.clock()
+								setAction("Đã tới tọa độ cũ! Chuẩn bị quét tên màn...")
 							else
-								setAction("Chưa tới vị trí 2 cũ, thử đi bộ lại...")
+								setAction("Chưa tới tọa độ cũ, thử đi bộ lại...")
 							end
 						end)
 					end
-				else
-					if os.clock() - lastStartTick >= CFG.START_RETRY_DELAY then
-						lastStartTick = os.clock()
-						local fired = fireTryToStart()
-						setAction(fired
-							and "Đã gửi Bắt đầu, đợi vào trận..."
-							or "Chờ Elevator5 / TryToStart sẵn sàng...")
+
+				elseif not lobbyStageVerified then
+					if not arrivedAtWalkGoalAt then
+						arrivedAtWalkGoalAt = os.clock()
 					end
-				end
-
-			elseif env == "IN_MATCH" then
-				gate1Passed = false
-				tp2Done = false
-				walkToFinalDone = false
-				isWalkingNow = false
-				lastInteractTick = 0
-
-				if not inMatchEnteredAt then
-					inMatchEnteredAt = os.clock()
-					setAction("Đã vào trận, đợi load rồi quét màn...")
-					return
-				end
-
-				if not matchVerifiedDone then
-					if os.clock() - inMatchEnteredAt < CFG.MATCH_SCAN_DELAY then
-						setAction("Đang chờ vào trận ổn định để quét màn...")
+					if os.clock() - arrivedAtWalkGoalAt < CFG.LOBBY_SCAN_DELAY then
+						setAction("Đang quét màn tại tọa độ cũ...")
 						return
 					end
 
-					local stageRaw, stageKey, allowedSlot, lives = detectStageInMatch()
+					local stageRaw, stageKey, allowedSlot, lives = detectStageInfo()
 					if stageRaw then STATE.currentStageRaw = stageRaw end
 					if stageKey then STATE.currentStageKey = stageKey end
 					if allowedSlot then STATE.currentSlot = allowedSlot end
@@ -879,13 +949,70 @@ task.spawn(function()
 						STATE.lastLivesLeft ~= nil and tostring(STATE.lastLivesLeft) or "?"
 					)
 
-					if stageKey ~= nil and not allowedSlot then
-						setAction(string.format("Màn '%s' ngoài 3 màn -> Đang Rejoin...", tostring(stageRaw)))
+					-- Dù là màn nào cũng không chặn ở sảnh: cho đi tiếp vào trận, vô xong sẽ tự rejoin nếu là màn khác
+					lobbyStageVerified = true
+					setAction(string.format("Đã quét '%s' -> Chuẩn bị Bắt đầu vào trận...", tostring(STATE.currentStageRaw or "Màn hiện tại")))
+
+				else
+					stageLbl.Text = string.format(
+						"Màn: %s | Mạng: %s",
+						tostring(STATE.currentStageRaw or "Đang vào trận..."),
+						STATE.lastLivesLeft ~= nil and tostring(STATE.lastLivesLeft) or "?"
+					)
+
+					if os.clock() - lastStartTick >= CFG.START_RETRY_DELAY then
+						lastStartTick = os.clock()
+						local fired = fireTryToStart()
+						setAction(fired
+							and string.format("Đã bấm Bắt đầu (%s), đợi vào trận...", tostring(STATE.currentStageRaw or ""))
+							or "Chờ Elevator5 / TryToStart sẵn sàng...")
+					end
+				end
+
+			elseif env == "IN_MATCH" then
+				gate1Passed = false
+				tp2Done = false
+				walkToFinalDone = false
+				arrivedAtWalkGoalAt = nil
+				lobbyStageVerified = false
+				isWalkingNow = false
+				lastInteractTick = 0
+
+				if not inMatchEnteredAt then
+					inMatchEnteredAt = os.clock()
+					setAction("Đã vào trận, đợi load xong để kiểm tra màn...")
+					return
+				end
+
+				if not matchStageChecked then
+					if os.clock() - inMatchEnteredAt < CFG.MATCH_VERIFY_DELAY then
+						setAction("Đang load vào trận...")
+						return
+					end
+
+					-- Ưu tiên màn đã quét lúc đi bộ vào tọa độ cũ; nếu chưa có thì thử quét lại UI trong trận
+					local matchStageRaw, matchStageKey, matchSlot, lives = detectStageInfo()
+					if matchStageRaw then STATE.currentStageRaw = matchStageRaw end
+					if matchStageKey then STATE.currentStageKey = matchStageKey end
+					if matchSlot then STATE.currentSlot = matchSlot end
+					if lives ~= nil then STATE.lastLivesLeft = lives end
+
+					local checkKey = STATE.currentStageKey					local isAllowed = checkKey and ALLOWED_STAGES[checkKey] ~= nil
+
+					stageLbl.Text = string.format(
+						"Màn: %s | Mạng: %s",
+						tostring(STATE.currentStageRaw or checkKey or "Không rõ"),
+						STATE.lastLivesLeft ~= nil and tostring(STATE.lastLivesLeft) or "?"
+					)
+
+					-- Nếu là màn khác (không nằm trong Kagoshima 1, Kagoshima 2, Kyoto 1) -> vào trận rồi tự rejoin lại
+					if checkKey ~= nil and not isAllowed then
+						setAction(string.format("Vào trận màn khác '%s' -> Tự động Rejoin lại...", tostring(STATE.currentStageRaw or checkKey)))
 						triggerRejoin()
 						return
 					end
 
-					matchVerifiedDone = true
+					matchStageChecked = true
 				end
 
 				local activeKey = STATE.currentStageKey or "kagoshima 1"
