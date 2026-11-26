@@ -5,8 +5,10 @@ local CoreGui = game:GetService("CoreGui")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
+local Functions = ReplicatedStorage:WaitForChild("Functions")
+local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 
--- ================= CẤU HÌNH DANH SÁCH MÀN CHO PHÉP =================
+-- ================= CẤU HÌNH CHUNG & KAGOSHIMA 1 =================
 local ALLOWED_STAGES = {
 	["kagoshima 1"] = 1,
 	["kagoshima 2"] = 2,
@@ -26,6 +28,15 @@ local CFG = {
 	START_RETRY_DELAY = 2.5,
 	REJOIN_COOLDOWN = 6.0,
 	LOOP_TICK = 0.35,
+
+	-- Cấu hình riêng cho Kagoshima 1 (tham khảo ngont.txt)
+	startupWait = 3.0,          -- Đợi 3 giây load xong mới chạy
+	autoStartWave = 7,          -- Bắt đầu tự động liên tục từ wave 7
+	autoLoopTick = 0.45,        -- Nhịp chạy auto liên tục từ wave 7
+	spawnWait = 1.2,
+	upWait = 0.65,
+	retryWait = 1.4,
+	moneyTimeout = 3.5,
 }
 
 _G.CullingTestState = _G.CullingTestState or {
@@ -36,7 +47,8 @@ _G.CullingTestState = _G.CullingTestState or {
 }
 local STATE = _G.CullingTestState
 
--- ================= 1. XÁC ĐỊNH TIỀN & WAVE =================
+-- ================= 1. TIỀN & WAVE =================
+local MULT = { K = 1e3, M = 1e6, B = 1e9, T = 1e12 }
 local function parseNumber(val)
 	if typeof(val) == "number" then return val end
 	if typeof(val) ~= "string" then return nil end
@@ -45,11 +57,7 @@ local function parseNumber(val)
 	local mult = 1
 	local suffix = clean:match("[kKmMbBtT]$")
 	if suffix then
-		suffix = suffix:upper()
-		if suffix == "K" then mult = 1e3
-		elseif suffix == "M" then mult = 1e6
-		elseif suffix == "B" then mult = 1e9
-		elseif suffix == "T" then mult = 1e12 end
+		mult = MULT[suffix:upper()] or 1
 		clean = clean:sub(1, -2)
 	end
 
@@ -132,7 +140,7 @@ local function getCurrentWave()
 	return nil, nil, nil
 end
 
--- ================= 2. XÁC ĐỊNH SẢNH VS TRONG TRẬN =================
+-- ================= 2. XÁC ĐỊNH SẢNH VS TRONG TRẬN & QUÉT MÀN =================
 local function detectEnvironment()
 	local wave, maxWave = getCurrentWave()
 	local towersFolder = workspace:FindFirstChild("Towers")
@@ -164,7 +172,6 @@ local function detectEnvironment()
 	return "LOBBY"
 end
 
--- ================= 3. QUÉT MÀN KHI ĐÃ VÀO TRẬN =================
 local function normalizeStageKey(rawName)
 	if typeof(rawName) ~= "string" or rawName == "" then return nil end
 	local clean = rawName:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", ""):lower()
@@ -205,7 +212,7 @@ local function detectStageInMatch()
 	return stageRaw, key, slot, livesLeft
 end
 
--- ================= 4. TP, ĐI BỘ, TƯƠNG TÁC, BẮT ĐẦU & REJOIN =================
+-- ================= 3. TP, ĐI BỘ, TƯƠNG TÁC, BẮT ĐẦU & REJOIN =================
 local function getCharacterAndParts()
 	local char = player.Character
 	if not char then return nil, nil, nil end
@@ -318,8 +325,7 @@ local function triggerPromptSafe(prompt)
 end
 
 local function fireTryToStart()
-	local remotes = ReplicatedStorage:FindFirstChild("Remotes")
-	local cgtRemotes = remotes and remotes:FindFirstChild("CullingGamesTeleporters")
+	local cgtRemotes = Remotes:FindFirstChild("CullingGamesTeleporters")
 	local tryToStart = cgtRemotes and cgtRemotes:FindFirstChild("TryToStart")
 	local teleporters = workspace:FindFirstChild("CullingGamesTeleporters")
 	local elevator = teleporters and teleporters:FindFirstChild(CFG.ELEVATOR_NAME)
@@ -347,10 +353,239 @@ local function triggerRejoin()
 	end)
 end
 
--- ================= 5. KHUNG CHẠY THEO MÀN (CHỜ SCRIPT WIN BẠN GỬI) =================
+-- ================= 4. LOGIC CHIẾN ĐẤU KAGOSHIMA 1 =================
+local function moneyDropped(before)
+	if before == nil then return false end
+	local dl = os.clock() + CFG.moneyTimeout
+	while os.clock() < dl do
+		task.wait(0.1)
+		local now = getCurrentMoney()
+		if now and now < before then return true end
+	end
+	return false
+end
+
+local function allTowers()
+	local f = workspace:FindFirstChild("Towers")
+	return f and f:GetChildren() or {}
+end
+
+local function findTowerByName(name)
+	local f = workspace:FindFirstChild("Towers")
+	if not f or not name then return nil end
+	if f:FindFirstChild(name) then return f[name] end
+	if not name:match("%d+$") then
+		for _, suf in ipairs({ "1", "_1", " 1" }) do
+			if f:FindFirstChild(name .. suf) then return f[name .. suf] end
+		end
+	end
+	for _, d in ipairs(f:GetDescendants()) do
+		if d.Name == name then return d end
+	end
+	local pre = name:match("^(.-)%d+$") or name
+	for _, c in ipairs(f:GetChildren()) do
+		if c.Name == pre or c.Name:sub(1, #pre) == pre then return c end
+	end
+	return nil
+end
+
+local function chooseModifiersOnce()
+	local cg = Remotes:FindFirstChild("CullingGames")
+	local cm = cg and cg:FindFirstChild("ChooseModifiers")
+	if cm then
+		pcall(function()
+			cm:FireServer(1, false)
+		end)
+	end
+end
+
+local function fireVoteSkip()
+	local vs = Remotes:FindFirstChild("VoteSkip")
+	if vs then
+		pcall(function()
+			if vs:IsA("RemoteEvent") then
+				vs:FireServer()
+			elseif vs:IsA("RemoteFunction") then
+				vs:InvokeServer()
+			end
+		end)
+	end
+end
+
+local function trySpawnTower(towerId, cf, setActionFn, tag)
+	local m0 = getCurrentMoney()
+	local prev = {}
+	for _, t in ipairs(allTowers()) do prev[t] = true end
+
+	local ok, res = pcall(function()
+		return Functions.SpawnNewTower:InvokeServer(towerId, cf)
+	end)
+
+	local drop = moneyDropped(m0)
+	local spawned = (typeof(res) == "Instance")
+	if not spawned then
+		for _, t in ipairs(allTowers()) do
+			if not prev[t] then
+				spawned = true
+				break
+			end
+		end
+	end
+
+	if setActionFn then
+		setActionFn(string.format("%s (-tiền=%s | đặt=%s)", tag, tostring(drop), tostring(ok and (res ~= false or spawned))))
+	end
+
+	return ok and res ~= false and (drop or spawned or m0 == nil)
+end
+
+local function tryClickTower(towerId, cf, setActionFn, tag)
+	local ok, res = pcall(function()
+		return Functions.SpawnNewTower:InvokeServer(towerId, cf)
+	end)
+	if setActionFn then
+		setActionFn(string.format("%s (Click=%s)", tag, tostring(ok and res ~= false)))
+	end
+	return ok and res ~= false
+end
+
+local function tryUpgradeTower(targetName, setActionFn, tag)
+	local tgt = findTowerByName(targetName)
+	if not tgt then
+		if setActionFn then
+			setActionFn(string.format("%s [chờ %s]", tag, tostring(targetName)))
+		end
+		return false
+	end
+
+	local m0 = getCurrentMoney()
+	local ok, res = pcall(function()
+		return Functions.UpgradeTower:InvokeServer(tgt)
+	end)
+	local drop = moneyDropped(m0)
+
+	if setActionFn then
+		setActionFn(string.format("%s (-tiền=%s)", tag, tostring(drop)))
+	end
+
+	return ok and res ~= false and drop
+end
+
+local KAGOSHIMA_1_STEPS = {
+	{ kind = "spawn", tag = "#2 Đặt", towerId = "3a4f9c5c-dcfc-46aa-ad1e-be37e88c9c66", cf = CFrame.new(4.864310264587402, 47.32311248779297, -121.51627349853516) * CFrame.Angles(-3.1415927410125732, -8.742277657347586e-08, -3.1415927410125732) },
+	{ kind = "spawn", tag = "#3 Đặt", towerId = "be8f9440-55fc-4aa6-9317-0b5581a076f6", cf = CFrame.new(-25.062589645385742, 47.15073776245117, -107.02923583984375) * CFrame.Angles(-3.1415927410125732, -8.742277657347586e-08, -3.1415927410125732) },
+	{ kind = "click", tag = "#4 Click", towerId = "be8f9440-55fc-4aa6-9317-0b5581a076f6", cf = CFrame.new(-25.062589645385742, 47.15073776245117, -107.02923583984375) * CFrame.Angles(-3.1415927410125732, -8.742277657347586e-08, -3.1415927410125732) },
+	{ kind = "spawn", tag = "#5 Đặt", towerId = "be8f9440-55fc-4aa6-9317-0b5581a076f6", cf = CFrame.new(-26.276447296142578, 47.150733947753906, -111.41389465332031) * CFrame.Angles(-3.1415927410125732, -8.742277657347586e-08, -3.1415927410125732) },
+	{ kind = "spawn", tag = "#6 Đặt", towerId = "be8f9440-55fc-4aa6-9317-0b5581a076f6", cf = CFrame.new(-26.276447296142578, 47.150733947753906, -111.41389465332031) * CFrame.Angles(-3.1415927410125732, -8.742277657347586e-08, -3.1415927410125732) },
+	{ kind = "upgrade", tag = "#7 Nâng SorcererAgent", targetName = "SorcererAgent" },
+	{ kind = "spawn", tag = "#8 Đặt", towerId = "be8f9440-55fc-4aa6-9317-0b5581a076f6", cf = CFrame.new(-15.050935745239258, 47.15073776245117, -108.41059875488281) * CFrame.Angles(-3.1415927410125732, -8.742277657347586e-08, -3.1415927410125732) },
+	{ kind = "spawn", tag = "#9 Đặt", towerId = "be8f9440-55fc-4aa6-9317-0b5581a076f6", cf = CFrame.new(-15.050935745239258, 47.15073776245117, -108.41059875488281) * CFrame.Angles(-3.1415927410125732, -8.742277657347586e-08, -3.1415927410125732) },
+	{ kind = "upgrade", tag = "#10 Nâng SorcererAgent", targetName = "SorcererAgent" },
+	{ kind = "upgrade", tag = "#11 Nâng SorcererAgent", targetName = "SorcererAgent" },
+	{ kind = "spawn", tag = "#12 Đặt", towerId = "348f2cd1-e2e9-48c8-a13b-589f09bc0654", cf = CFrame.new(22.122488021850586, 47.150047302246094, -121.02806091308594) * CFrame.Angles(-3.1415927410125732, -8.742277657347586e-08, -3.1415927410125732) },
+	{ kind = "upgrade", tag = "#13 Nâng SoulCurse", targetName = "SoulCurse" },
+	{ kind = "upgrade", tag = "#14 Nâng SorcererAgent2", targetName = "SorcererAgent2" },
+	{ kind = "upgrade", tag = "#15 Nâng SorcererAgent3", targetName = "SorcererAgent3" },
+	{ kind = "upgrade", tag = "#16 Nâng SorcererAgent2", targetName = "SorcererAgent2" },
+	{ kind = "skip", tag = "#17 VoteSkip" },
+	{ kind = "spawn", tag = "#18 Đặt", towerId = "a7976e77-c58a-44c6-bde9-d9710fd14ac2", cf = CFrame.new(26.937042236328125, 47.16230010986328, -117.86810302734375) * CFrame.Angles(-3.1415927410125732, -8.742277657347586e-08, -3.1415927410125732) },
+	{ kind = "upgrade", tag = "#19 Nâng SoulCurse2", targetName = "SoulCurse2" },
+	{ kind = "upgrade", tag = "#20 Nâng SorcererAgent2", targetName = "SorcererAgent2" },
+	{ kind = "upgrade", tag = "#21 Nâng SoulCurse3", targetName = "SoulCurse3" },
+	{ kind = "upgrade", tag = "#22 Nâng FingerBearerAwk", targetName = "FingerBearerAwk" },
+	{ kind = "upgrade", tag = "#23 Nâng FingerBearerAwk2", targetName = "FingerBearerAwk2" },
+}
+
+local AUTO_TARGETS_FROM_WAVE_7 = {
+	{ kind = "upgrade", tag = "Auto W7+ Nâng FingerBearerAwk2", targetName = "FingerBearerAwk2" },
+	{ kind = "upgrade", tag = "Auto W7+ Nâng FingerBearerAwk", targetName = "FingerBearerAwk" },
+	{ kind = "upgrade", tag = "Auto W7+ Nâng SoulCurse3", targetName = "SoulCurse3" },
+	{ kind = "upgrade", tag = "Auto W7+ Nâng SoulCurse2", targetName = "SoulCurse2" },
+	{ kind = "upgrade", tag = "Auto W7+ Nâng SoulCurse", targetName = "SoulCurse" },
+	{ kind = "upgrade", tag = "Auto W7+ Nâng SorcererAgent3", targetName = "SorcererAgent3" },
+	{ kind = "upgrade", tag = "Auto W7+ Nâng SorcererAgent2", targetName = "SorcererAgent2" },
+	{ kind = "upgrade", tag = "Auto W7+ Nâng SorcererAgent", targetName = "SorcererAgent" },
+	{ kind = "spawn", tag = "Auto W7+ Đặt #18", towerId = "a7976e77-c58a-44c6-bde9-d9710fd14ac2", cf = CFrame.new(26.937042236328125, 47.16230010986328, -117.86810302734375) * CFrame.Angles(-3.1415927410125732, -8.742277657347586e-08, -3.1415927410125732) },
+	{ kind = "spawn", tag = "Auto W7+ Đặt #12", towerId = "348f2cd1-e2e9-48c8-a13b-589f09bc0654", cf = CFrame.new(22.122488021850586, 47.150047302246094, -121.02806091308594) * CFrame.Angles(-3.1415927410125732, -8.742277657347586e-08, -3.1415927410125732) },
+}
+
+local function runKagoshima1(setActionFn, activeRef)
+	-- Đợi 3 giây load xong mới chạy
+	local t0 = os.clock()
+	while activeRef() and detectEnvironment() == "IN_MATCH" and (os.clock() - t0) < CFG.startupWait do
+		local rem = math.max(0, CFG.startupWait - (os.clock() - t0))
+		setActionFn(string.format("Kagoshima 1: Đợi %.1fs load xong...", rem))
+		task.wait(0.1)
+	end
+
+	if not activeRef() or detectEnvironment() ~= "IN_MATCH" then return end
+
+	-- Chọn modifiers mở màn
+	chooseModifiersOnce()
+	setActionFn("Kagoshima 1: Đã chọn Modifier, chạy chuỗi bước...")
+
+	-- Chạy chuỗi bước chính của Kagoshima 1
+	for _, step in ipairs(KAGOSHIMA_1_STEPS) do
+		if not activeRef() or detectEnvironment() ~= "IN_MATCH" then return end
+
+		if step.kind == "spawn" then
+			local tries = 0
+			while activeRef() and detectEnvironment() == "IN_MATCH" and tries < 8 do
+				tries += 1
+				if trySpawnTower(step.towerId, step.cf, setActionFn, step.tag .. " #" .. tries) then
+					task.wait(CFG.spawnWait)
+					break
+				end
+				task.wait(CFG.retryWait)
+			end
+		elseif step.kind == "click" then
+			tryClickTower(step.towerId, step.cf, setActionFn, step.tag)
+			task.wait(0.35)
+		elseif step.kind == "upgrade" then
+			local tries = 0
+			while activeRef() and detectEnvironment() == "IN_MATCH" and tries < 6 do
+				tries += 1
+				if tryUpgradeTower(step.targetName, setActionFn, step.tag .. " #" .. tries) then
+					task.wait(CFG.upWait)
+					break
+				end
+				task.wait(CFG.retryWait)
+			end
+		elseif step.kind == "skip" then
+			fireVoteSkip()
+			setActionFn(step.tag)
+			task.wait(0.5)
+		end
+	end
+
+	-- Bắt đầu từ wave 7 -> auto liên tục (nâng cấp + đặt thêm + vote skip)
+	while activeRef() and detectEnvironment() == "IN_MATCH" do
+		local w = getCurrentWave()
+		if w and w >= CFG.autoStartWave then
+			fireVoteSkip()
+			for _, item in ipairs(AUTO_TARGETS_FROM_WAVE_7) do
+				if not activeRef() or detectEnvironment() ~= "IN_MATCH" then return end
+				local curW = getCurrentWave()
+				if not curW or curW < CFG.autoStartWave then break end
+
+				if item.kind == "upgrade" then
+					tryUpgradeTower(item.targetName, setActionFn, item.tag)
+					task.wait(0.25)
+				elseif item.kind == "spawn" then
+					trySpawnTower(item.towerId, item.cf, setActionFn, item.tag)
+					task.wait(0.35)
+				end
+			end
+		else
+			setActionFn(string.format("Kagoshima 1: Chờ Wave %d để auto liên tục (nay: %s)", CFG.autoStartWave, tostring(w)))
+		end
+		task.wait(CFG.autoLoopTick)
+	end
+end
+
 local STAGE_RUNNERS = {
-	["kagoshima 1"] = function(setStatus)
-		setStatus("Trong trận Kagoshima 1 - Chờ gắn script win")
+	["kagoshima 1"] = function(setStatus, activeRef)
+		runKagoshima1(setStatus, activeRef)
 	end,
 	["kagoshima 2"] = function(setStatus)
 		setStatus("Trong trận Kagoshima 2 - Chờ gắn script win")
@@ -360,7 +595,7 @@ local STAGE_RUNNERS = {
 	end,
 }
 
--- ================= 6. BẢNG TIỀN & WAVE + MENU NHỎ KÉO THẢ ĐƯỢC =================
+-- ================= 5. BẢNG TIỀN & WAVE + MENU NHỎ KÉO THẢ ĐƯỢC =================
 local function attachGui(gui)
 	if typeof(gethui) == "function" then
 		local ok, h = pcall(gethui)
@@ -420,7 +655,7 @@ waveLbl.Text = "Wave: ..."
 waveLbl.Parent = statsBox
 
 local menuBox = Instance.new("Frame")
-menuBox.Size = UDim2.fromOffset(285, 86)
+menuBox.Size = UDim2.fromOffset(295, 88)
 menuBox.Position = UDim2.fromOffset(18, 124)
 menuBox.BackgroundColor3 = Color3.fromRGB(22, 24, 30)
 menuBox.BorderSizePixel = 1
@@ -454,7 +689,7 @@ stageLbl.Text = "Màn: Đợi vào trận..."
 stageLbl.Parent = menuBox
 
 local actionLbl = Instance.new("TextLabel")
-actionLbl.Size = UDim2.new(1, -14, 0, 32)
+actionLbl.Size = UDim2.new(1, -14, 0, 34)
 actionLbl.Position = UDim2.fromOffset(7, 46)
 actionLbl.BackgroundTransparency = 1
 actionLbl.Font = Enum.Font.SourceSans
@@ -516,7 +751,7 @@ task.spawn(function()
 	end
 end)
 
--- ================= 7. VÒNG LẶP ĐIỀU PHỐI CHÍNH =================
+-- ================= 6. VÒNG LẶP ĐIỀU PHỐI CHÍNH =================
 task.spawn(function()
 	local gate1Passed = false
 	local tp2Done = false
@@ -665,7 +900,7 @@ task.spawn(function()
 					local runner = STAGE_RUNNERS[activeKey]
 					if runner then
 						task.spawn(function()
-							runner(setAction)
+							runner(setAction, function() return active end)
 						end)
 					else
 						setAction("Trong trận " .. tostring(activeKey))
