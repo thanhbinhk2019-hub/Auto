@@ -2,21 +2,13 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TeleportService = game:GetService("TeleportService")
 local CoreGui = game:GetService("CoreGui")
-local Workspace = game:GetService("Workspace")
-local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
-local function getPlayerGui()
-	if not player then return nil end
-	local pg = player:FindFirstChildOfClass("PlayerGui")
-	if pg then return pg end
-	local ok, waited = pcall(function()
-		return player:WaitForChild("PlayerGui", 10)
-	end)
-	return ok and waited or nil
-end
+local playerGui = player:WaitForChild("PlayerGui")
+local Functions = ReplicatedStorage:WaitForChild("Functions")
+local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 
--- ================= CẤU HÌNH CHUNG & KAGOSHIMA 1 =================
+-- ================= CẤU HÌNH DANH SÁCH MÀN CHO PHÉP =================
 local ALLOWED_STAGES = {
 	["kagoshima 1"] = 1,
 	["kagoshima 2"] = 2,
@@ -32,25 +24,23 @@ local CFG = {
 	ARRIVAL_DIST = 5.5,
 	TELEPORT_AWAY_DIST = 25,
 	WALK_TIMEOUT = 16,
-	LOBBY_SCAN_DELAY = 0.8,     -- Đợi UI khu Culling hiện lên sau khi đi bộ tới tọa độ cũ
-	MATCH_VERIFY_DELAY = 1.5,   -- Đợi load vào trận rồi kiểm tra màn khác để tự rejoin
+	MATCH_SCAN_DELAY = 1.5,
+	STAGE_DETECT_TIMEOUT = 8.0,
 	START_RETRY_DELAY = 2.5,
 	REJOIN_COOLDOWN = 6.0,
 	LOOP_TICK = 0.35,
 
-	-- Cấu hình riêng cho Kagoshima 1
-	startupWait = 3.0,          -- Đợi 3 giây load xong mới chạy
-	autoStartWave = 7,          -- Bắt đầu tự động liên tục từ wave 7
-	autoLoopTick = 0.45,        -- Nhịp chạy auto liên tục từ wave 7
-	spawnWait = 1.2,
-	upWait = 0.65,
-	retryWait = 1.4,
-	moneyTimeout = 3.5,
-
-	-- AI né trùng vị trí & đặt bằng được mới ngừng
-	minTowerDist = 1.8,
-	aiStep = 1.35,
-	aiMaxRing = 6,
+	-- Cấu hình script win dựa theo log SimpleSpy Kagoshima 1 ([1] -> [23])
+	startupWait = 3.0,
+	spawnWait = 1.35,
+	upWait = 0.75,
+	retryWait = 1.35,
+	moneyTimeout = 4.0,
+	autoStartWave = 7,
+	autoLoopTick = 0.45,
+	minTowerDist = 1.6,
+	aiStep = 1.25,
+	aiMaxRing = 4,
 }
 
 _G.CullingTestState = _G.CullingTestState or {
@@ -61,94 +51,43 @@ _G.CullingTestState = _G.CullingTestState or {
 }
 local STATE = _G.CullingTestState
 
--- Hàm tra cứu Remote động (không phụ thuộc biến cache cũ)
-local function findFunctionRemote(name)
-	local f = ReplicatedStorage:FindFirstChild("Functions")
-	if f then
-		local r = f:FindFirstChild(name, true)
-		if r then return r end
-	end
-	return ReplicatedStorage:FindFirstChild(name, true)
-end
-
-local function findRemote(pathParts, leafName)
-	local cur = ReplicatedStorage:FindFirstChild("Remotes")
-	if cur and pathParts then
-		for _, p in ipairs(pathParts) do
-			if not cur then break end
-			cur = cur:FindFirstChild(p)
-		end
-		if cur and leafName then
-			local target = cur:FindFirstChild(leafName)
-			if target then return target end
-		end
-	end
-	if leafName then
-		local rFolder = ReplicatedStorage:FindFirstChild("Remotes")
-		if rFolder then
-			return rFolder:FindFirstChild(leafName, true)
-		end
-	end
-	return nil
-end
-
--- ================= 1. TIỀN & WAVE =================
-local MULT = { K = 1e3, M = 1e6, B = 1e9, T = 1e12 }
+-- ================= 1. XÁC ĐỊNH TIỀN & WAVE =================
 local function parseNumber(val)
-	if typeof(val) == "number" then
-		if val ~= val or val == math.huge or val == -math.huge then return nil end
-		return val
-	end
+	if typeof(val) == "number" then return val end
 	if typeof(val) ~= "string" then return nil end
 
 	local clean = val:gsub(",", ""):gsub("%$", ""):gsub("%s+", "")
 	local mult = 1
 	local suffix = clean:match("[kKmMbBtT]$")
 	if suffix then
-		mult = MULT[suffix:upper()] or 1
+		suffix = suffix:upper()
+		if suffix == "K" then mult = 1e3
+		elseif suffix == "M" then mult = 1e6
+		elseif suffix == "B" then mult = 1e9
+		elseif suffix == "T" then mult = 1e12 end
 		clean = clean:sub(1, -2)
 	end
 
 	local numStr = clean:match("%-?%d+%.?%d*")
 	local n = tonumber(numStr)
-	if not n or n ~= n or n == math.huge or n == -math.huge then
-		return nil
-	end
-	return n * mult
+	return n and (n * mult) or nil
 end
 
 local function getCurrentMoney()
-	local pg = getPlayerGui()
-	if pg then
-		local okUi, valUi, rawUi = pcall(function()
-			for _, obj in ipairs(pg:GetDescendants()) do
-				if (obj:IsA("TextLabel") or obj:IsA("TextButton")) and obj.Name == "Gold" and obj.Text ~= "" then
-					local n = parseNumber(obj.Text)
-					if n then return n, obj.Text end
-				end
-			end
-			return nil, nil
-		end)
-		if okUi and valUi then
-			return valUi, rawUi
+	for _, obj in ipairs(playerGui:GetDescendants()) do
+		if (obj:IsA("TextLabel") or obj:IsA("TextButton")) and obj.Name == "Gold" and obj.Text ~= "" then
+			local n = parseNumber(obj.Text)
+			if n then return n, obj.Text end
 		end
 	end
 
-	if player then
-		local okLs, valLs, rawLs = pcall(function()
-			local leaderstats = player:FindFirstChild("leaderstats")
-			if leaderstats then
-				for _, v in ipairs(leaderstats:GetChildren()) do
-					if v:IsA("ValueBase") then
-						local n = parseNumber(v.Value)
-						if n then return n, tostring(v.Value) end
-					end
-				end
+	local leaderstats = player:FindFirstChild("leaderstats")
+	if leaderstats then
+		for _, v in ipairs(leaderstats:GetChildren()) do
+			if v:IsA("ValueBase") then
+				local n = parseNumber(v.Value)
+				if n then return n, tostring(v.Value) end
 			end
-			return nil, nil
-		end)
-		if okLs and valLs then
-			return valLs, rawLs
 		end
 	end
 
@@ -182,69 +121,54 @@ local function parseWaveText(txt, strictPairOnly)
 end
 
 local function getCurrentWave()
-	local pg = getPlayerGui()
-	if not pg then return nil, nil, nil end
-
-	local ok, wCur, wMax, wRaw = pcall(function()
-		for _, obj in ipairs(pg:GetDescendants()) do
-			if (obj:IsA("TextLabel") or obj:IsA("TextButton")) and obj.Text ~= "" then
-				if obj.Name == "Wave" or obj.Name == "Sóng" then
-					local cur, total = parseWaveText(obj.Text, false)
-					if cur then
-						return cur, total, obj.Text
-					end
+	for _, obj in ipairs(playerGui:GetDescendants()) do
+		if (obj:IsA("TextLabel") or obj:IsA("TextButton")) and obj.Text ~= "" then
+			if obj.Name == "Wave" or obj.Name == "Sóng" then
+				local cur, total = parseWaveText(obj.Text, false)
+				if cur then
+					return cur, total, obj.Text
 				end
 			end
 		end
-
-		for _, obj in ipairs(pg:GetDescendants()) do
-			if (obj:IsA("TextLabel") or obj:IsA("TextButton")) and obj.Text ~= "" then
-				local ltxt = obj.Text:lower()
-				if ltxt:find("sóng") or ltxt:find("wave") then
-					local cur, total = parseWaveText(obj.Text, true)
-					if cur then
-						return cur, total, obj.Text
-					end
-				end
-			end
-		end
-
-		return nil, nil, nil
-	end)
-
-	if ok then
-		return wCur, wMax, wRaw
 	end
+
+	for _, obj in ipairs(playerGui:GetDescendants()) do
+		if (obj:IsA("TextLabel") or obj:IsA("TextButton")) and obj.Text ~= "" then
+			local ltxt = obj.Text:lower()
+			if ltxt:find("sóng") or ltxt:find("wave") then
+				local cur, total = parseWaveText(obj.Text, true)
+				if cur then
+					return cur, total, obj.Text
+				end
+			end
+		end
+	end
+
 	return nil, nil, nil
 end
 
--- ================= 2. XÁC ĐỊNH SẢNH VS TRONG TRẬN & QUÉT MÀN =================
+-- ================= 2. XÁC ĐỊNH SẢNH VS TRONG TRẬN =================
 local function detectEnvironment()
 	local wave, maxWave = getCurrentWave()
-	local towersFolder = Workspace:FindFirstChild("Towers")
+	local towersFolder = workspace:FindFirstChild("Towers")
 	local hasTowers = towersFolder ~= nil and #towersFolder:GetChildren() > 0
 
 	local hasColonyUi = false
-	local pg = getPlayerGui()
-	if pg then
-		pcall(function()
-			for _, obj in ipairs(pg:GetDescendants()) do
-				if (obj:IsA("TextLabel") or obj:IsA("TextButton")) and obj.Text ~= "" then
-					local n = obj.Name
-					if n == "ColonyName" or n == "ColonyNum" or n == "CurrentColony" or n == "LivesLeft" then
-						hasColonyUi = true
-						break
-					end
-				end
+	for _, obj in ipairs(playerGui:GetDescendants()) do
+		if (obj:IsA("TextLabel") or obj:IsA("TextButton")) and obj.Text ~= "" then
+			local n = obj.Name
+			if n == "ColonyName" or n == "ColonyNum" or n == "CurrentColony" or n == "LivesLeft" then
+				hasColonyUi = true
+				break
 			end
-		end)
+		end
 	end
 
 	if (wave ~= nil and maxWave ~= nil) or (hasTowers and not hasColonyUi) then
 		return "IN_MATCH"
 	end
 
-	if hasColonyUi or (Workspace:FindFirstChild("CullingGamesTeleporters") ~= nil and wave == nil) then
+	if hasColonyUi or (workspace:FindFirstChild("CullingGamesTeleporters") ~= nil and wave == nil) then
 		return "LOBBY"
 	end
 
@@ -255,44 +179,119 @@ local function detectEnvironment()
 	return "LOBBY"
 end
 
+-- ================= 3. QUÉT & XÁC ĐỊNH KAGOSHIMA / KYOTO CHÍNH XÁC =================
 local function normalizeStageKey(rawName)
 	if typeof(rawName) ~= "string" or rawName == "" then return nil end
-	local clean = rawName:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", ""):lower()
-	return clean ~= "" and clean or nil
+	local clean = rawName
+		:gsub("[%c%z]", " ")
+		:gsub("%s+", " ")
+		:gsub("^%s+", "")
+		:gsub("%s+$", "")
+		:lower()
+	if clean == "" then return nil end
+
+	local area, num = clean:match("^(kagoshima)%s*[-:#/]?%s*(%d+)$")
+	if not area then
+		area, num = clean:match("^(kyoto)%s*[-:#/]?%s*(%d+)$")
+	end
+	if area and num then
+		return area .. " " .. tostring(tonumber(num))
+	end
+
+	area, num = clean:match("(kagoshima)%s*[-:#/]?%s*(%d+)")
+	if not area then
+		area, num = clean:match("(kyoto)%s*[-:#/]?%s*(%d+)")
+	end
+	if area and num then
+		return area .. " " .. tostring(tonumber(num))
+	end
+
+	return clean
 end
 
-local function detectStageInfo()
+local function extractStageCandidateFromText(rawText)
+	if typeof(rawText) ~= "string" or rawText == "" then return nil end
+	local clean = rawText:gsub("[%c%z]", " "):gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+	if clean == "" then return nil end
+
+	local area, num = clean:lower():match("(kagoshima)%s*[-:#/]?%s*(%d+)")
+	if not area then
+		area, num = clean:lower():match("(kyoto)%s*[-:#/]?%s*(%d+)")
+	end
+	if area and num then
+		return area:sub(1, 1):upper() .. area:sub(2) .. " " .. tostring(tonumber(num))
+	end
+
+	local otherArea, otherNum = clean:lower():match("(sendai)%s*[-:#/]?%s*(%d+)")
+	if not otherArea then
+		otherArea, otherNum = clean:lower():match("(tokyo)%s*[-:#/]?%s*(%d+)")
+	end
+	if otherArea and otherNum then
+		return otherArea:sub(1, 1):upper() .. otherArea:sub(2) .. " " .. tostring(tonumber(otherNum))
+	end
+
+	return nil
+end
+
+local function isStageUiVisible(obj)
+	local cur = obj
+	while cur and cur ~= playerGui do
+		if cur:IsA("GuiObject") and not cur.Visible then
+			return false
+		end
+		if cur:IsA("LayerCollector") and not cur.Enabled then
+			return false
+		end
+		cur = cur.Parent
+	end
+	return true
+end
+
+local function detectStageInMatch()
 	local stageRaw = nil
 	local livesLeft = nil
-	local pg = getPlayerGui()
+	local fallbackAllowedRaw = nil
+	local fallbackOtherRaw = nil
 
-	if pg then
-		pcall(function()
-			for _, obj in ipairs(pg:GetDescendants()) do
-				if (obj:IsA("TextLabel") or obj:IsA("TextButton")) and obj.Text ~= "" then
-					local clean = obj.Text:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
-					if obj.Name == "ColonyName" and clean ~= "" then
-						stageRaw = clean
-					elseif obj.Name == "LivesLeft" then
-						local n = clean:match("(%d+)")
-						if n then livesLeft = tonumber(n) end
+	for _, obj in ipairs(playerGui:GetDescendants()) do
+		if (obj:IsA("TextLabel") or obj:IsA("TextButton")) and obj.Text ~= "" and isStageUiVisible(obj) then
+			local clean = obj.Text:gsub("[%c%z]", " "):gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+			if obj.Name == "ColonyName" and clean ~= "" then
+				local extracted = extractStageCandidateFromText(clean)
+				stageRaw = extracted or clean
+			elseif obj.Name == "LivesLeft" then
+				local n = clean:match("(%d+)")
+				if n then livesLeft = tonumber(n) end
+			end
+		end
+	end
+
+	if not stageRaw then
+		for _, obj in ipairs(playerGui:GetDescendants()) do
+			if (obj:IsA("TextLabel") or obj:IsA("TextButton")) and obj.Text ~= "" and isStageUiVisible(obj) then
+				local cand = extractStageCandidateFromText(obj.Text)
+				if cand then
+					local k = normalizeStageKey(cand)
+					if k and ALLOWED_STAGES[k] then
+						fallbackAllowedRaw = cand
+						break
+					elseif not fallbackOtherRaw then
+						fallbackOtherRaw = cand
 					end
 				end
 			end
+		end
+		stageRaw = fallbackAllowedRaw or fallbackOtherRaw
+	end
 
-			if not stageRaw then
-				for _, obj in ipairs(pg:GetDescendants()) do
-					if (obj:IsA("TextLabel") or obj:IsA("TextButton")) and obj.Text ~= "" then
-						local clean = obj.Text:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
-						local low = clean:lower()
-						if low:match("^kagoshima%s*%d+$") or low:match("^kyoto%s*%d+$") or low:match("^sendai%s*%d+$") or low:match("^tokyo%s*%d+$") then
-							stageRaw = clean
-							break
-						end
-					end
-				end
+	if not stageRaw then
+		for _, attrName in ipairs({ "ColonyName", "StageName", "MapName", "CurrentStage", "CurrentColony" }) do
+			local aVal = workspace:GetAttribute(attrName) or player:GetAttribute(attrName)
+			if typeof(aVal) == "string" and aVal ~= "" then
+				stageRaw = extractStageCandidateFromText(aVal) or aVal
+				break
 			end
-		end)
+		end
 	end
 
 	local key = normalizeStageKey(stageRaw)
@@ -300,28 +299,13 @@ local function detectStageInfo()
 	return stageRaw, key, slot, livesLeft
 end
 
--- ================= 3. TP, ĐI BỘ, TƯƠNG TÁC, BẮT ĐẦU & REJOIN =================
+-- ================= 4. TP, ĐI BỘ, TƯƠNG TÁC, BẮT ĐẦU & REJOIN =================
 local function getCharacterAndParts()
-	if not player then return nil, nil, nil end
 	local char = player.Character
-	if not char or not char.Parent then return nil, nil, nil end
+	if not char then return nil, nil, nil end
 	local root = char:FindFirstChild("HumanoidRootPart")
 	local hum = char:FindFirstChildOfClass("Humanoid")
 	return char, root, hum
-end
-
-local function safeSetCFrame(root, cf)
-	if not root or not root.Parent then return false end
-	return pcall(function()
-		local char = root.Parent
-		if char and char:IsA("Model") and char.PrimaryPart then
-			char:PivotTo(cf)
-		else
-			root.CFrame = cf
-		end
-		root.AssemblyLinearVelocity = Vector3.zero
-		root.AssemblyAngularVelocity = Vector3.zero
-	end)
 end
 
 local function walkToPosition(targetPos, setActionFn, stageLabel, activeRef)
@@ -356,7 +340,6 @@ local function walkToPosition(targetPos, setActionFn, stageLabel, activeRef)
 
 			pcall(function()
 				curHum.PlatformStand = false
-				curHum.Sit = false
 				if curHum.WalkSpeed < 16 then
 					curHum.WalkSpeed = 16
 				end
@@ -404,51 +387,40 @@ local function findNearestPrompt(maxDistOverride)
 	local _, root = getCharacterAndParts()
 	if not root then return nil end
 	local nearest, nearestDist = nil, math.huge
-	pcall(function()
-		for _, obj in ipairs(Workspace:GetDescendants()) do
-			if obj:IsA("ProximityPrompt") and obj.Enabled then
-				local pos = getPromptPosition(obj)
-				if pos then
-					local d = (root.Position - pos).Magnitude
-					local limit = maxDistOverride or obj.MaxActivationDistance
-					if d <= limit and d < nearestDist then
-						nearest = obj
-						nearestDist = d
-					end
+	for _, obj in ipairs(workspace:GetDescendants()) do
+		if obj:IsA("ProximityPrompt") and obj.Enabled then
+			local pos = getPromptPosition(obj)
+			if pos then
+				local d = (root.Position - pos).Magnitude
+				local limit = maxDistOverride or obj.MaxActivationDistance
+				if d <= limit and d < nearestDist then
+					nearest = obj
+					nearestDist = d
 				end
 			end
 		end
-	end)
+	end
 	return nearest
 end
 
 local function triggerPromptSafe(prompt)
 	if not prompt or not prompt.Parent or not prompt.Enabled then return false end
-	if typeof(fireproximityprompt) == "function" then
-		local ok = pcall(function()
-			fireproximityprompt(prompt)
-		end)
-		if ok then return true end
-	end
+	if typeof(fireproximityprompt) ~= "function" then return false end
 	return pcall(function()
-		prompt:InputHoldBegin()
-		task.wait(math.min(prompt.HoldDuration or 0.1, 0.25))
-		prompt:InputHoldEnd()
+		fireproximityprompt(prompt)
 	end)
 end
 
 local function fireTryToStart()
-	local tryToStart = findRemote({ "CullingGamesTeleporters" }, "TryToStart")
-	local teleporters = Workspace:FindFirstChild("CullingGamesTeleporters")
+	local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+	local cgtRemotes = remotes and remotes:FindFirstChild("CullingGamesTeleporters")
+	local tryToStart = cgtRemotes and cgtRemotes:FindFirstChild("TryToStart")
+	local teleporters = workspace:FindFirstChild("CullingGamesTeleporters")
 	local elevator = teleporters and teleporters:FindFirstChild(CFG.ELEVATOR_NAME)
 
 	if tryToStart and elevator then
 		return pcall(function()
-			if tryToStart:IsA("RemoteEvent") then
-				tryToStart:FireServer(elevator)
-			elseif tryToStart:IsA("RemoteFunction") then
-				tryToStart:InvokeServer(elevator)
-			end
+			tryToStart:FireServer(elevator)
 		end)
 	end
 	return false
@@ -469,364 +441,327 @@ local function triggerRejoin()
 	end)
 end
 
--- ================= 4. LOGIC CHIẾN ĐẤU KAGOSHIMA 1 =================
-local aiMem = { badPos = {}, bestDirById = {} }
+-- ================= 5. SCRIPT WIN DỰA THEO LOG SIMPLESPY (KAGOSHIMA 1) =================
+-- Lưu ý log SimpleSpy:
+-- [1] ChooseModifiers: FireServer(1, false)
+-- [2] SpawnNewTower("3a4f9c5c-dcfc-46aa-ad1e-be37e88c9c66", cf)
+-- [3] SpawnNewTower("be8f9440-55fc-4aa6-9317-0b5581a076f6", cf)  -- bỏ log [4] Click trùng
+-- [5] SpawnNewTower("be8f9440-55fc-4aa6-9317-0b5581a076f6", cf)  -- bỏ log [6] SpawnNewTower trùng
+-- [7] UpgradeTower(workspace.Towers.SorcererAgent)
+-- [8] SpawnNewTower("be8f9440-55fc-4aa6-9317-0b5581a076f6", cf)  -- bỏ log [9] UpgradeTower sai tham số (towerId + cf)
+-- [10]..[11] UpgradeTower(workspace.Towers.SorcererAgent)
+-- [12] SpawnNewTower("348f2cd1-e2e9-48c8-a13b-589f09bc0654", cf)
+-- [13]..[16] UpgradeTower(SoulCurse / SorcererAgent2 / SorcererAgent3 / SorcererAgent2)
+-- [17] VoteSkip: FireServer()
+-- [18] SpawnNewTower("a7976e77-c58a-44c6-bde9-d9710fd14ac2", cf)
+-- [19]..[23] UpgradeTower(SoulCurse2 / SorcererAgent2 / SoulCurse3 / FingerBearerAwk / FingerBearerAwk2)
 
-local function posKey(cf)
-	local p = cf.Position
-	return string.format("%.1f_%.1f_%.1f", p.X, p.Y, p.Z)
-end
+local SPY_STEPS = {
+	{ stepId = 2, action = "spawn", towerId = "3a4f9c5c-dcfc-46aa-ad1e-be37e88c9c66", cf = CFrame.new(4.864310264587402, 47.32311248779297, -121.51627349853516) * CFrame.Angles(-3.1415927410125732, -8.742277657347586e-08, -3.1415927410125732) },
+	{ stepId = 3, action = "spawn", towerId = "be8f9440-55fc-4aa6-9317-0b5581a076f6", cf = CFrame.new(-25.062589645385742, 47.15073776245117, -107.02923583984375) * CFrame.Angles(-3.1415927410125732, -8.742277657347586e-08, -3.1415927410125732) },
+	{ stepId = 5, action = "spawn", towerId = "be8f9440-55fc-4aa6-9317-0b5581a076f6", cf = CFrame.new(-26.276447296142578, 47.150733947753906, -111.41389465332031) * CFrame.Angles(-3.1415927410125732, -8.742277657347586e-08, -3.1415927410125732) },
+	{ stepId = 7, action = "upgrade", targetName = "SorcererAgent" },
+	{ stepId = 8, action = "spawn", towerId = "be8f9440-55fc-4aa6-9317-0b5581a076f6", cf = CFrame.new(-15.050935745239258, 47.15073776245117, -108.41059875488281) * CFrame.Angles(-3.1415927410125732, -8.742277657347586e-08, -3.1415927410125732) },
+	{ stepId = 10, action = "upgrade", targetName = "SorcererAgent" },
+	{ stepId = 11, action = "upgrade", targetName = "SorcererAgent" },
+	{ stepId = 12, action = "spawn", towerId = "348f2cd1-e2e9-48c8-a13b-589f09bc0654", cf = CFrame.new(22.122488021850586, 47.150047302246094, -121.02806091308594) * CFrame.Angles(-3.1415927410125732, -8.742277657347586e-08, -3.1415927410125732) },
+	{ stepId = 13, action = "upgrade", targetName = "SoulCurse" },
+	{ stepId = 14, action = "upgrade", targetName = "SorcererAgent2" },
+	{ stepId = 15, action = "upgrade", targetName = "SorcererAgent3" },
+	{ stepId = 16, action = "upgrade", targetName = "SorcererAgent2" },
+	{ stepId = 17, action = "skip" },
+	{ stepId = 18, action = "spawn", towerId = "a7976e77-c58a-44c6-bde9-d9710fd14ac2", cf = CFrame.new(26.937042236328125, 47.16230010986328, -117.86810302734375) * CFrame.Angles(-3.1415927410125732, -8.742277657347586e-08, -3.1415927410125732) },
+	{ stepId = 19, action = "upgrade", targetName = "SoulCurse2" },
+	{ stepId = 20, action = "upgrade", targetName = "SorcererAgent2" },
+	{ stepId = 21, action = "upgrade", targetName = "SoulCurse3" },
+	{ stepId = 22, action = "upgrade", targetName = "FingerBearerAwk" },
+	{ stepId = 23, action = "upgrade", targetName = "FingerBearerAwk2" },
+}
 
-local function moneyDropped(before)
-	if before == nil then return false end
-	local dl = os.clock() + CFG.moneyTimeout
-	while os.clock() < dl do
-		task.wait(0.1)
-		local now = getCurrentMoney()
-		if now and now < before then return true end
-	end
-	return false
-end
+local AUTO_UPGRADE_LOOP = {
+	"FingerBearerAwk2",
+	"FingerBearerAwk",
+	"SoulCurse3",
+	"SoulCurse2",
+	"SoulCurse",
+	"SorcererAgent3",
+	"SorcererAgent2",
+	"SorcererAgent",
+}
 
-local function allTowers()
-	local f = Workspace:FindFirstChild("Towers")
-	return f and f:GetChildren() or {}
-end
-
-local function getTowerPos(obj)
-	if not obj then return nil end
-	if obj:IsA("Model") then
-		local ok, cf = pcall(function() return obj:GetPivot() end)
-		if ok and cf then return cf.Position end
-	elseif obj:IsA("BasePart") then
-		return obj.Position
-	end
-	local hrp = obj:FindFirstChildWhichIsA("BasePart", true)
-	return hrp and hrp.Position or nil
-end
-
-local function isPosNearTower(pos)
-	for _, t in ipairs(allTowers()) do
-		local tp = getTowerPos(t)
-		if tp and (Vector3.new(tp.X, pos.Y, tp.Z) - Vector3.new(pos.X, pos.Y, pos.Z)).Magnitude < CFG.minTowerDist then
-			return true
+local function createWinRunner(stageTitle, activeRef)
+	return function(setStatus)
+		local winActive = true
+		local function isRunning()
+			return winActive and activeRef() and detectEnvironment() == "IN_MATCH"
 		end
-	end
-	return false
-end
 
-local DIRS = { {1,0}, {-1,0}, {0,1}, {0,-1}, {1,1}, {1,-1}, {-1,1}, {-1,-1} }
-
-local function pickNonOverlappingCf(baseCf, towerId, attemptIdx)
-	local _, rx, ry, rz = baseCf:ToEulerAnglesXYZ()
-	local p = baseCf.Position
-
-	if attemptIdx <= 1 and not isPosNearTower(p) and not aiMem.badPos[posKey(baseCf)] then
-		return baseCf, nil
-	end
-
-	local list = {}
-	local fav = aiMem.bestDirById[tostring(towerId or "")]
-	if fav then table.insert(list, fav) end
-	for _, d in ipairs(DIRS) do
-		if not fav or d[1] ~= fav[1] or d[2] ~= fav[2] then
-			table.insert(list, d)
-		end
-	end
-
-	local fallbackCand, fallbackDir
-	for ring = 1, CFG.aiMaxRing do
-		for _, d in ipairs(list) do
-			local cand = CFrame.new(p.X + d[1] * ring * CFG.aiStep, p.Y, p.Z + d[2] * ring * CFG.aiStep) * CFrame.Angles(rx, ry, rz)
-			if not aiMem.badPos[posKey(cand)] then
-				if not fallbackCand then
-					fallbackCand, fallbackDir = cand, d
-				end
-				if not isPosNearTower(cand.Position) then
-					return cand, d
-				end
+		local function setWinStep(t)
+			if isRunning() and setStatus then
+				setStatus(string.format("[%s] %s", stageTitle, tostring(t)))
 			end
 		end
-	end
 
-	if fallbackCand then
-		return fallbackCand, fallbackDir
-	end
+		local aiMem = { badPos = {}, bestDirById = {} }
+		local DIRS = { {1,0}, {-1,0}, {0,1}, {0,-1}, {1,1}, {1,-1}, {-1,1}, {-1,-1} }
 
-	local extraRing = CFG.aiMaxRing + ((attemptIdx - 1) % 4) + 1
-	local d = list[((attemptIdx - 1) % #list) + 1]
-	return CFrame.new(p.X + d[1] * extraRing * CFG.aiStep, p.Y, p.Z + d[2] * extraRing * CFG.aiStep) * CFrame.Angles(rx, ry, rz), d
-end
-
-local function findTowerByName(name)
-	local f = Workspace:FindFirstChild("Towers")
-	if not f or not name then return nil end
-	if f:FindFirstChild(name) then return f[name] end
-	if not name:match("%d+$") then
-		for _, suf in ipairs({ "1", "_1", " 1" }) do
-			if f:FindFirstChild(name .. suf) then return f[name .. suf] end
+		local function posKey(cf)
+			local p = cf.Position
+			return string.format("%.1f_%.1f_%.1f", p.X, p.Y, p.Z)
 		end
-	end
-	for _, d in ipairs(f:GetDescendants()) do
-		if d.Name == name then return d end
-	end
-	local pre = name:match("^(.-)%d+$") or name
-	for _, c in ipairs(f:GetChildren()) do
-		if c.Name == pre or c.Name:sub(1, #pre) == pre then return c end
-	end
-	return nil
-end
 
-local function chooseModifiersOnce()
-	local cm = findRemote({ "CullingGames" }, "ChooseModifiers")
-	if cm then
-		pcall(function()
-			if cm:IsA("RemoteEvent") then
-				cm:FireServer(1, false)
-			elseif cm:IsA("RemoteFunction") then
-				cm:InvokeServer(1, false)
+		local function allTowers()
+			local f = workspace:FindFirstChild("Towers")
+			return f and f:GetChildren() or {}
+		end
+
+		local function getTowerPos(obj)
+			if not obj then return nil end
+			if obj:IsA("Model") then
+				local ok, cf = pcall(function() return obj:GetPivot() end)
+				if ok and cf then return cf.Position end
+			elseif obj:IsA("BasePart") then
+				return obj.Position
 			end
-		end)
-	end
-end
+			local hrp = obj:FindFirstChildWhichIsA("BasePart", true)
+			return hrp and hrp.Position or nil
+		end
 
-local function fireVoteSkip()
-	local vs = findRemote(nil, "VoteSkip")
-	if vs then
-		pcall(function()
-			if vs:IsA("RemoteEvent") then
-				vs:FireServer()
-			elseif vs:IsA("RemoteFunction") then
-				vs:InvokeServer()
-			end
-		end)
-	end
-end
-
-local function spawnUntilSuccess(towerId, baseCf, setActionFn, tag, activeRef)
-	local tries = 0
-	while activeRef() and detectEnvironment() == "IN_MATCH" do
-		tries += 1
-		local spawnFn = findFunctionRemote("SpawnNewTower")
-		if not spawnFn then
-			if setActionFn then
-				setActionFn(string.format("%s [chờ SpawnNewTower]", tag))
-			end
-			task.wait(0.6)
-		else
-			local targetCf, usedDir = pickNonOverlappingCf(baseCf, towerId, tries)
-			local m0 = getCurrentMoney()
-			local prev = {}
-			for _, t in ipairs(allTowers()) do prev[t] = true end
-
-			local ok, res = pcall(function()
-				if spawnFn:IsA("RemoteFunction") then
-					return spawnFn:InvokeServer(towerId, targetCf)
-				elseif spawnFn:IsA("RemoteEvent") then
-					spawnFn:FireServer(towerId, targetCf)
+		local function isPosNearTower(pos)
+			for _, t in ipairs(allTowers()) do
+				local tp = getTowerPos(t)
+				if tp and (Vector3.new(tp.X, pos.Y, tp.Z) - Vector3.new(pos.X, pos.Y, pos.Z)).Magnitude < CFG.minTowerDist then
 					return true
 				end
-				return false
-			end)
+			end
+			return false
+		end
 
-			local drop = moneyDropped(m0)
-			local spawned = (typeof(res) == "Instance")
-			if not spawned then
-				for _, t in ipairs(allTowers()) do
-					if not prev[t] then
-						spawned = true
-						break
+		local function findTower(name)
+			local f = workspace:FindFirstChild("Towers")
+			if not f or not name then return nil end
+			if f:FindFirstChild(name) then return f[name] end
+			if not name:match("%d+$") then
+				for _, suf in ipairs({ "1", "_1", " 1" }) do
+					if f:FindFirstChild(name .. suf) then return f[name .. suf] end
+				end
+			end
+			for _, d in ipairs(f:GetDescendants()) do
+				if d.Name == name then return d end
+			end
+			local pre = name:match("^(.-)%d+$") or name
+			for _, c in ipairs(f:GetChildren()) do
+				if c.Name == pre or c.Name:sub(1, #pre) == pre then return c end
+			end
+			return nil
+		end
+
+		local function moneyDropped(before)
+			if before == nil then return false end
+			local dl = os.clock() + CFG.moneyTimeout
+			while isRunning() and os.clock() < dl do
+				task.wait(0.1)
+				local now = getCurrentMoney()
+				if now and now < before then return true end
+			end
+			return false
+		end
+
+		local function aiPickCf(baseCf, towerId, idx)
+			local _, rx, ry, rz = baseCf:ToEulerAnglesXYZ()
+			local p = baseCf.Position
+
+			if idx <= 1 and not isPosNearTower(p) and not aiMem.badPos[posKey(baseCf)] then
+				return baseCf, nil
+			end
+
+			local list = {}
+			local fav = aiMem.bestDirById[tostring(towerId or "")]
+			if fav then table.insert(list, fav) end
+			for _, d in ipairs(DIRS) do
+				if not fav or d[1] ~= fav[1] or d[2] ~= fav[2] then
+					table.insert(list, d)
+				end
+			end
+
+			local fallbackCand, fallbackDir
+			for ring = 1, CFG.aiMaxRing do
+				for _, d in ipairs(list) do
+					local cand = CFrame.new(p.X + d[1] * ring * CFG.aiStep, p.Y, p.Z + d[2] * ring * CFG.aiStep) * CFrame.Angles(rx, ry, rz)
+					if not aiMem.badPos[posKey(cand)] then
+						if not fallbackCand then
+							fallbackCand, fallbackDir = cand, d
+						end
+						if not isPosNearTower(cand.Position) then
+							return cand, d
+						end
 					end
 				end
 			end
 
-			local shifted = (targetCf.Position - baseCf.Position).Magnitude > 0.05
-			if setActionFn then
-				setActionFn(string.format("%s [#%d%s | -tiền=%s]", tag, tries, shifted and " | ĐỔI VỊ TRÍ" or "", tostring(drop)))
-			end
-
-			if ok and res ~= false and (drop or spawned) then
-				if usedDir then
-					aiMem.bestDirById[tostring(towerId or "")] = usedDir
-				end
-				task.wait(CFG.spawnWait)
-				return true
-			end
-
-			if m0 == nil or m0 >= 100 then
-				aiMem.badPos[posKey(targetCf)] = true
-			end
-			if tries % 16 == 0 then
-				aiMem.badPos = {}
-			end
-
-			task.wait(CFG.retryWait)
+			if fallbackCand then return fallbackCand, fallbackDir end
+			local d = list[((idx - 1) % #list) + 1]
+			return CFrame.new(p.X + d[1] * CFG.aiStep, p.Y, p.Z + d[2] * CFG.aiStep) * CFrame.Angles(rx, ry, rz), d
 		end
-	end
-	return false
-end
 
-local function tryUpgradeTower(targetName, setActionFn, tag)
-	local upFn = findFunctionRemote("UpgradeTower")
-	if not upFn then return false end
-
-	local tgt = findTowerByName(targetName)
-	if not tgt then
-		if setActionFn then
-			setActionFn(string.format("%s [chờ %s]", tag, tostring(targetName)))
+		local function chooseModifiers()
+			local cg = Remotes:FindFirstChild("CullingGames")
+			local cm = cg and cg:FindFirstChild("ChooseModifiers")
+			if cm then
+				pcall(function()
+					cm:FireServer(1, false)
+				end)
+			end
 		end
-		return false
-	end
 
-	local m0 = getCurrentMoney()
-	local ok, res = pcall(function()
-		if upFn:IsA("RemoteFunction") then
-			return upFn:InvokeServer(tgt)
-		elseif upFn:IsA("RemoteEvent") then
-			upFn:FireServer(tgt)
-			return true
+		local function voteSkip()
+			local vs = Remotes:FindFirstChild("VoteSkip")
+			if vs then
+				pcall(function()
+					if vs:IsA("RemoteEvent") then
+						vs:FireServer()
+					elseif vs:IsA("RemoteFunction") then
+						vs:InvokeServer()
+					end
+				end)
+			end
 		end
-		return false
-	end)
-	local drop = moneyDropped(m0)
 
-	if setActionFn then
-		setActionFn(string.format("%s (-tiền=%s)", tag, tostring(drop)))
-	end
-
-	return ok and res ~= false and drop
-end
-
-local KAGOSHIMA_1_STEPS = {
-	{ kind = "spawn", tag = "#2 Đặt", towerId = "3a4f9c5c-dcfc-46aa-ad1e-be37e88c9c66", cf = CFrame.new(4.864310264587402, 47.32311248779297, -121.51627349853516) * CFrame.Angles(-3.1415927410125732, -8.742277657347586e-08, -3.1415927410125732) },
-	{ kind = "spawn", tag = "#3 Đặt", towerId = "be8f9440-55fc-4aa6-9317-0b5581a076f6", cf = CFrame.new(-25.062589645385742, 47.15073776245117, -107.02923583984375) * CFrame.Angles(-3.1415927410125732, -8.742277657347586e-08, -3.1415927410125732) },
-	{ kind = "spawn", tag = "#5 Đặt", towerId = "be8f9440-55fc-4aa6-9317-0b5581a076f6", cf = CFrame.new(-26.276447296142578, 47.150733947753906, -111.41389465332031) * CFrame.Angles(-3.1415927410125732, -8.742277657347586e-08, -3.1415927410125732) },
-	{ kind = "upgrade", tag = "#7 Nâng SorcererAgent", targetName = "SorcererAgent" },
-	{ kind = "spawn", tag = "#8 Đặt", towerId = "be8f9440-55fc-4aa6-9317-0b5581a076f6", cf = CFrame.new(-15.050935745239258, 47.15073776245117, -108.41059875488281) * CFrame.Angles(-3.1415927410125732, -8.742277657347586e-08, -3.1415927410125732) },
-	{ kind = "upgrade", tag = "#10 Nâng SorcererAgent", targetName = "SorcererAgent" },
-	{ kind = "upgrade", tag = "#11 Nâng SorcererAgent", targetName = "SorcererAgent" },
-	{ kind = "spawn", tag = "#12 Đặt", towerId = "348f2cd1-e2e9-48c8-a13b-589f09bc0654", cf = CFrame.new(22.122488021850586, 47.150047302246094, -121.02806091308594) * CFrame.Angles(-3.1415927410125732, -8.742277657347586e-08, -3.1415927410125732) },
-	{ kind = "upgrade", tag = "#13 Nâng SoulCurse", targetName = "SoulCurse" },
-	{ kind = "upgrade", tag = "#14 Nâng SorcererAgent2", targetName = "SorcererAgent2" },
-	{ kind = "upgrade", tag = "#15 Nâng SorcererAgent3", targetName = "SorcererAgent3" },
-	{ kind = "upgrade", tag = "#16 Nâng SorcererAgent2", targetName = "SorcererAgent2" },
-	{ kind = "skip", tag = "#17 VoteSkip" },
-	{ kind = "spawn", tag = "#18 Đặt", towerId = "a7976e77-c58a-44c6-bde9-d9710fd14ac2", cf = CFrame.new(26.937042236328125, 47.16230010986328, -117.86810302734375) * CFrame.Angles(-3.1415927410125732, -8.742277657347586e-08, -3.1415927410125732) },
-	{ kind = "upgrade", tag = "#19 Nâng SoulCurse2", targetName = "SoulCurse2" },
-	{ kind = "upgrade", tag = "#20 Nâng SorcererAgent2", targetName = "SorcererAgent2" },
-	{ kind = "upgrade", tag = "#21 Nâng SoulCurse3", targetName = "SoulCurse3" },
-	{ kind = "upgrade", tag = "#22 Nâng FingerBearerAwk", targetName = "FingerBearerAwk" },
-	{ kind = "upgrade", tag = "#23 Nâng FingerBearerAwk2", targetName = "FingerBearerAwk2" },
-}
-
-local AUTO_TARGETS_FROM_WAVE_7 = {
-	{ kind = "upgrade", tag = "Auto W7+ Nâng FingerBearerAwk2", targetName = "FingerBearerAwk2" },
-	{ kind = "upgrade", tag = "Auto W7+ Nâng FingerBearerAwk", targetName = "FingerBearerAwk" },
-	{ kind = "upgrade", tag = "Auto W7+ Nâng SoulCurse3", targetName = "SoulCurse3" },
-	{ kind = "upgrade", tag = "Auto W7+ Nâng SoulCurse2", targetName = "SoulCurse2" },
-	{ kind = "upgrade", tag = "Auto W7+ Nâng SoulCurse", targetName = "SoulCurse" },
-	{ kind = "upgrade", tag = "Auto W7+ Nâng SorcererAgent3", targetName = "SorcererAgent3" },
-	{ kind = "upgrade", tag = "Auto W7+ Nâng SorcererAgent2", targetName = "SorcererAgent2" },
-	{ kind = "upgrade", tag = "Auto W7+ Nâng SorcererAgent", targetName = "SorcererAgent" },
-}
-
-local function runKagoshima1(setActionFn, activeRef)
-	aiMem.badPos = {}
-	aiMem.bestDirById = {}
-
-	local t0 = os.clock()
-	while activeRef() and detectEnvironment() == "IN_MATCH" and (os.clock() - t0) < CFG.startupWait do
-		local rem = math.max(0, CFG.startupWait - (os.clock() - t0))
-		setActionFn(string.format("Kagoshima 1: Đợi %.1fs load xong...", rem))
-		task.wait(0.1)
-	end
-
-	if not activeRef() or detectEnvironment() ~= "IN_MATCH" then return end
-
-	chooseModifiersOnce()
-	setActionFn("Kagoshima 1: Đã chọn Modifier, bắt đầu đặt tháp...")
-
-	for _, step in ipairs(KAGOSHIMA_1_STEPS) do
-		if not activeRef() or detectEnvironment() ~= "IN_MATCH" then return end
-
-		if step.kind == "spawn" then
-			spawnUntilSuccess(step.towerId, step.cf, setActionFn, step.tag, activeRef)
-		elseif step.kind == "upgrade" then
+		local function doSpawn(id, cf, lbl)
 			local tries = 0
-			while activeRef() and detectEnvironment() == "IN_MATCH" and tries < 6 do
+			while isRunning() do
 				tries += 1
-				if tryUpgradeTower(step.targetName, setActionFn, step.tag .. " #" .. tries) then
-					task.wait(CFG.upWait)
-					break
+				local targetCf, usedDir = aiPickCf(cf, id, tries)
+				local m0 = getCurrentMoney()
+				local prev = {}
+				for _, t in ipairs(allTowers()) do prev[t] = true end
+
+				local ok, res = pcall(function()
+					return Functions.SpawnNewTower:InvokeServer(id, targetCf)
+				end)
+				local drop = moneyDropped(m0)
+				local spawned = (typeof(res) == "Instance")
+				if not spawned then
+					for _, t in ipairs(allTowers()) do
+						if not prev[t] then
+							spawned = true
+							break
+						end
+					end
 				end
+
+				local shifted = (targetCf.Position - cf.Position).Magnitude > 0.05
+				setWinStep(string.format("%s [#%d%s | -tiền=%s]", lbl, tries, shifted and " | ĐỔI VỊ TRÍ" or "", tostring(drop)))
+
+				if ok and res ~= false and (drop or spawned) then
+					if usedDir then aiMem.bestDirById[tostring(id or "")] = usedDir end
+					task.wait(CFG.spawnWait)
+					return true
+				end
+
+				if m0 == nil or m0 >= 100 then
+					aiMem.badPos[posKey(targetCf)] = true
+				end
+				if tries % 16 == 0 then
+					aiMem.badPos = {}
+				end
+
 				task.wait(CFG.retryWait)
 			end
-		elseif step.kind == "skip" then
-			fireVoteSkip()
-			setActionFn(step.tag)
-			task.wait(0.5)
+			return false
 		end
-	end
 
-	while activeRef() and detectEnvironment() == "IN_MATCH" do
-		local w = getCurrentWave()
-		if w and w >= CFG.autoStartWave then
-			fireVoteSkip()
-			for _, item in ipairs(AUTO_TARGETS_FROM_WAVE_7) do
-				if not activeRef() or detectEnvironment() ~= "IN_MATCH" then return end
-				local curW = getCurrentWave()
-				if not curW or curW < CFG.autoStartWave then break end
+		local function doUpgrade(name, lbl)
+			local tries = 0
+			while isRunning() and tries < 6 do
+				tries += 1
+				local tgt = findTower(name)
+				if not tgt then
+					setWinStep(string.format("%s [chờ %s]", lbl, tostring(name)))
+					task.wait(CFG.retryWait)
+					continue
+				end
 
-				if item.kind == "upgrade" then
-					tryUpgradeTower(item.targetName, setActionFn, item.tag)
+				local m0 = getCurrentMoney()
+				local ok, res = pcall(function()
+					return Functions.UpgradeTower:InvokeServer(tgt)
+				end)
+				local drop = moneyDropped(m0)
+				setWinStep(string.format("%s #%d (-tiền=%s)", lbl, tries, tostring(drop)))
+
+				if ok and res ~= false and drop then
+					task.wait(CFG.upWait)
+					return true
+				end
+
+				task.wait(CFG.retryWait)
+			end
+			return false
+		end
+
+		local t0 = os.clock()
+		while isRunning() and (os.clock() - t0) < CFG.startupWait do
+			setWinStep(string.format("Đợi %.1fs load xong...", math.max(0, CFG.startupWait - (os.clock() - t0))))
+			task.wait(0.1)
+		end
+
+		if not isRunning() then return end
+
+		-- [1] ChooseModifiers
+		chooseModifiers()
+		setWinStep("[1] Đã chọn Modifier, bắt đầu chạy chuỗi [2] -> [23]...")
+
+		for i, s in ipairs(SPY_STEPS) do
+			if not isRunning() then break end
+			local tag = "#" .. (s.stepId or i)
+			if s.action == "spawn" then
+				doSpawn(s.towerId, s.cf, tag .. " Đặt")
+			elseif s.action == "upgrade" then
+				doUpgrade(s.targetName, tag .. " Nâng " .. tostring(s.targetName))
+			elseif s.action == "skip" then
+				voteSkip()
+				setWinStep(tag .. " VoteSkip")
+				task.wait(0.5)
+			end
+		end
+
+		while isRunning() do
+			local w = getCurrentWave()
+			if w and w >= CFG.autoStartWave then
+				voteSkip()
+				for _, tName in ipairs(AUTO_UPGRADE_LOOP) do
+					if not isRunning() then break end
+					local curW = getCurrentWave()
+					if not curW or curW < CFG.autoStartWave then break end
+					doUpgrade(tName, "Auto W7+ Nâng " .. tName)
 					task.wait(0.25)
 				end
+			else
+				setWinStep(string.format("Chờ Wave %d để auto nâng & skip (nay: %s)", CFG.autoStartWave, tostring(w)))
 			end
-		else
-			setActionFn(string.format("Kagoshima 1: Chờ Wave %d để auto liên tục (nay: %s)", CFG.autoStartWave, tostring(w)))
+			task.wait(CFG.autoLoopTick)
 		end
-		task.wait(CFG.autoLoopTick)
+
+		winActive = false
 	end
 end
 
 local STAGE_RUNNERS = {
-	["kagoshima 1"] = function(setStatus, activeRef)
-		runKagoshima1(setStatus, activeRef)
-	end,
-	["kagoshima 2"] = function(setStatus)
-		setStatus("Trong trận Kagoshima 2 - Chờ gắn script win")
-	end,
-	["kyoto 1"] = function(setStatus)
-		setStatus("Trong trận Kyoto 1 - Chờ gắn script win")
-	end,
+	["kagoshima 1"] = createWinRunner("Kagoshima 1", function() return _G.CullingHudActive == true end),
+	["kagoshima 2"] = createWinRunner("Kagoshima 2", function() return _G.CullingHudActive == true end),
+	["kyoto 1"] = createWinRunner("Kyoto 1", function() return _G.CullingHudActive == true end),
 }
 
--- ================= 5. BẢNG TIỀN & WAVE + MENU NHỎ KÉO THẢ ĐƯỢC =================
+-- ================= 6. BẢNG TIỀN & WAVE + MENU NHỎ KÉO THẢ ĐƯỢC =================
 local function attachGui(gui)
-	local mounted = false
 	if typeof(gethui) == "function" then
-		pcall(function()
-			local h = gethui()
-			if typeof(h) == "Instance" then
-				gui.Parent = h
-				mounted = true
-			end
-		end)
-	end
-	if not mounted then
-		pcall(function()
-			gui.Parent = CoreGui
-			mounted = true
-		end)
-	end
-	if not mounted then
-		local pg = getPlayerGui()
-		if pg then
-			gui.Parent = pg
-			mounted = true
+		local ok, h = pcall(gethui)
+		if ok and typeof(h) == "Instance" then
+			gui.Parent = h
+			return
 		end
 	end
-	return mounted
+	gui.Parent = playerGui or CoreGui
 end
 
 if _G.CullingFullHudStop then
@@ -877,7 +812,7 @@ waveLbl.Text = "Wave: ..."
 waveLbl.Parent = statsBox
 
 local menuBox = Instance.new("Frame")
-menuBox.Size = UDim2.fromOffset(295, 88)
+menuBox.Size = UDim2.fromOffset(285, 86)
 menuBox.Position = UDim2.fromOffset(18, 124)
 menuBox.BackgroundColor3 = Color3.fromRGB(22, 24, 30)
 menuBox.BorderSizePixel = 1
@@ -907,11 +842,11 @@ stageLbl.TextSize = 12
 stageLbl.TextColor3 = Color3.fromRGB(220, 175, 255)
 stageLbl.TextXAlignment = Enum.TextXAlignment.Left
 stageLbl.TextTruncate = Enum.TextTruncate.AtEnd
-stageLbl.Text = "Màn: Chờ tới khu Culling..."
+stageLbl.Text = "Màn: Đợi vào trận..."
 stageLbl.Parent = menuBox
 
 local actionLbl = Instance.new("TextLabel")
-actionLbl.Size = UDim2.new(1, -14, 0, 34)
+actionLbl.Size = UDim2.new(1, -14, 0, 32)
 actionLbl.Position = UDim2.fromOffset(7, 46)
 actionLbl.BackgroundTransparency = 1
 actionLbl.Font = Enum.Font.SourceSans
@@ -935,21 +870,19 @@ closeBtn.Text = "Tắt"
 closeBtn.Parent = menuBox
 
 local active = true
+_G.CullingHudActive = true
 _G.CullingFullHudStop = function()
 	active = false
+	_G.CullingHudActive = false
 	if sg then
-		pcall(function()
-			sg:Destroy()
-		end)
+		sg:Destroy()
 	end
 end
 closeBtn.MouseButton1Click:Connect(_G.CullingFullHudStop)
 
 local function setAction(txt)
 	if actionLbl and active then
-		pcall(function()
-			actionLbl.Text = "Đang làm: " .. tostring(txt)
-		end)
+		actionLbl.Text = "Đang làm: " .. tostring(txt)
 	end
 end
 
@@ -977,24 +910,170 @@ task.spawn(function()
 	end
 end)
 
--- ================= 6. VÒNG LẶP ĐIỀU PHỐI CHÍNH =================
+-- ================= 7. VÒNG LẶP ĐIỀU PHỐI CHÍNH =================
 task.spawn(function()
 	local gate1Passed = false
 	local tp2Done = false
 	local walkToFinalDone = false
-	local arrivedAtWalkGoalAt = nil
-	local lobbyStageVerified = false
 	local isWalkingNow = false
 	local lastInteractTick = 0
 	local lastStartTick = 0
 	local inMatchEnteredAt = nil
-	local matchStageChecked = false
+	local matchVerifiedDone = false
 	local startedMatchKey = nil
 
 	while active do
-		local okLoop, errLoop = pcall(function()
+		pcall(function()
 			local env = detectEnvironment()
 			modeLbl.Text = env == "LOBBY" and "Vị trí: Ở SẢNH" or "Vị trí: TRONG TRẬN"
 
 			if env == "LOBBY" then
+				inMatchEnteredAt = nil
+				matchVerifiedDone = false
 				startedMatchKey = nil
+				stageLbl.Text = "Màn: Đợi vào trận mới quét..."
+
+				local _, root = getCharacterAndParts()
+				if not root then
+					setAction("Chờ nhân vật xuất hiện...")
+					return
+				end
+
+				local distGate1 = (root.Position - CFG.LOBBY_GATE_1).Magnitude
+				local distTp2 = (root.Position - CFG.CULLING_TP2_POS).Magnitude
+				local distWalkGoal = (root.Position - CFG.CULLING_WALK_POS).Magnitude
+
+				if distWalkGoal <= CFG.ARRIVAL_DIST then
+					gate1Passed = true
+					tp2Done = true
+					walkToFinalDone = true
+				elseif distTp2 <= CFG.ARRIVAL_DIST then
+					gate1Passed = true
+					tp2Done = true
+				end
+
+				if not gate1Passed then
+					if distGate1 > CFG.ARRIVAL_DIST then
+						if lastInteractTick > 0 and distGate1 >= CFG.TELEPORT_AWAY_DIST then
+							gate1Passed = true
+							tp2Done = false
+							walkToFinalDone = false
+							setAction("Đã qua cổng 1! Chuẩn bị TP điểm 2...")
+							return
+						end
+						setAction(string.format("TP tới cổng 1 (%.1fm)...", distGate1))
+						root.CFrame = CFrame.new(CFG.LOBBY_GATE_1)
+					else
+						local prompt = findNearestPrompt(15)
+						if prompt then
+							if os.clock() - lastInteractTick >= 2.0 then
+								lastInteractTick = os.clock()
+								triggerPromptSafe(prompt)
+								setAction("Đã bấm Tương tác cổng 1, chờ game TP...")
+							end
+						else
+							setAction("Đang tìm nút Tương tác tại cổng 1...")
+						end
+					end
+				elseif not tp2Done then
+					if distTp2 > CFG.ARRIVAL_DIST then
+						setAction(string.format("TP tới vị trí 2 mới (%.1fm)...", distTp2))
+						root.CFrame = CFrame.new(CFG.CULLING_TP2_POS)
+					else
+						tp2Done = true
+						setAction("Đã tới vị trí 2 mới, chuẩn bị đi bộ...")
+					end
+				elseif not walkToFinalDone then
+					if not isWalkingNow then
+						isWalkingNow = true
+						task.spawn(function()
+							local okWalk = walkToPosition(CFG.CULLING_WALK_POS, setAction, "Đi bộ tới vị trí 2 cũ", function() return active end)
+							isWalkingNow = false
+							if okWalk then
+								walkToFinalDone = true
+								setAction("Đã đi bộ tới vị trí 2 cũ!")
+							else
+								setAction("Chưa tới vị trí 2 cũ, thử đi bộ lại...")
+							end
+						end)
+					end
+				else
+					if os.clock() - lastStartTick >= CFG.START_RETRY_DELAY then
+						lastStartTick = os.clock()
+						local fired = fireTryToStart()
+						setAction(fired
+							and "Đã gửi Bắt đầu, đợi vào trận..."
+							or "Chờ Elevator5 / TryToStart sẵn sàng...")
+					end
+				end
+
+			elseif env == "IN_MATCH" then
+				gate1Passed = false
+				tp2Done = false
+				walkToFinalDone = false
+				isWalkingNow = false
+				lastInteractTick = 0
+
+				if not inMatchEnteredAt then
+					inMatchEnteredAt = os.clock()
+					setAction("Đã vào trận, đợi load rồi quét màn...")
+					return
+				end
+
+				if not matchVerifiedDone then
+					local elapsed = os.clock() - inMatchEnteredAt
+					if elapsed < CFG.MATCH_SCAN_DELAY then
+						setAction("Đang chờ vào trận ổn định để quét màn...")
+						return
+					end
+
+					local stageRaw, stageKey, allowedSlot, lives = detectStageInMatch()
+					if stageRaw then STATE.currentStageRaw = stageRaw end
+					if stageKey then STATE.currentStageKey = stageKey end
+					if allowedSlot then STATE.currentSlot = allowedSlot end
+					if lives ~= nil then STATE.lastLivesLeft = lives end
+
+					stageLbl.Text = string.format(
+						"Màn: %s | Mạng: %s",
+						tostring(STATE.currentStageRaw or "Đang quét..."),
+						STATE.lastLivesLeft ~= nil and tostring(STATE.lastLivesLeft) or "?"
+					)
+
+					if stageKey ~= nil and not allowedSlot then
+						setAction(string.format("Màn '%s' ngoài 3 màn -> Đang Rejoin...", tostring(stageRaw)))
+						triggerRejoin()
+						return
+					end
+
+					if allowedSlot or elapsed >= CFG.STAGE_DETECT_TIMEOUT then
+						matchVerifiedDone = true
+					else
+						setAction("Đang quét tên màn Kagoshima / Kyoto...")
+						return
+					end
+				end
+
+				local activeKey = STATE.currentStageKey or "kagoshima 1"
+				stageLbl.Text = string.format(
+					"Màn: %s | Mạng: %s",
+					tostring(STATE.currentStageRaw or activeKey),
+					STATE.lastLivesLeft ~= nil and tostring(STATE.lastLivesLeft) or "?"
+				)
+
+				if startedMatchKey ~= activeKey then
+					startedMatchKey = activeKey
+					local runner = STAGE_RUNNERS[activeKey]
+					if runner then
+						task.spawn(function()
+							runner(setAction)
+						end)
+					else
+						setAction("Trong trận " .. tostring(activeKey))
+					end
+				end
+			end
+		end)
+
+		task.wait(CFG.LOOP_TICK)
+	end
+end)
