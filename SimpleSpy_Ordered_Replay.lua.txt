@@ -1,0 +1,1652 @@
+-- SimpleSpy ordered replay: original Log #1 -> Log #157
+-- Generated from the supplied 157-log export. Arguments and log numbers are preserved.
+-- FireServer only confirms that the client sent the event; it gives no server acknowledgement.
+-- InvokeServer is awaited. Any client-side error stops the sequence; no automatic retries for purchase/sell actions.
+
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local guiParent = player:WaitForChild("PlayerGui")
+if typeof(gethui) == "function" then
+    local ok, h = pcall(gethui)
+    if ok and typeof(h) == "Instance" then guiParent = h end
+end
+if _G.SimpleSpyReplayStop then pcall(_G.SimpleSpyReplayStop) end
+local stopped = false
+_G.SimpleSpyReplayStop = function() stopped = true end
+
+local screen = Instance.new("ScreenGui")
+screen.Name = "SimpleSpyReplayStatus"
+screen.ResetOnSpawn = false
+screen.DisplayOrder = 999999
+screen.Parent = guiParent
+local frame = Instance.new("Frame")
+frame.Size = UDim2.fromOffset(300, 76)
+frame.Position = UDim2.fromOffset(20, 180)
+frame.BackgroundColor3 = Color3.fromRGB(25, 27, 34)
+frame.Parent = screen
+local label = Instance.new("TextLabel")
+label.Size = UDim2.new(1, -12, 0, 42)
+label.Position = UDim2.fromOffset(6, 2)
+label.BackgroundTransparency = 1
+label.TextColor3 = Color3.new(1, 1, 1)
+label.TextSize = 14
+label.Font = Enum.Font.SourceSansBold
+label.TextWrapped = true
+label.Text = "Chuẩn bị chạy Log #1/157"
+label.Parent = frame
+local stop = Instance.new("TextButton")
+stop.Size = UDim2.new(1, -12, 0, 26)
+stop.Position = UDim2.fromOffset(6, 46)
+stop.Text = "DỪNG"
+stop.TextSize = 14
+stop.Parent = frame
+stop.MouseButton1Click:Connect(function() stopped = true; label.Text = "Đang dừng..." end)
+
+local unpackArgs = table.unpack or unpack
+local delayBetween = 0.35
+local function runStep(logNo, name, args, callFn, isInvoke)
+    if stopped then return false end
+    label.Text = string.format("Đang chạy Log #%d/157: %s", logNo, name)
+    local ok, result = pcall(callFn, args)
+    if not ok then
+        label.Text = string.format("LỖI tại Log #%d (%s) — đã dừng", logNo, name)
+        warn("[Replay] Dừng tại Log #" .. logNo .. ": " .. tostring(result))
+        stopped = true
+        return false
+    end
+    if isInvoke then
+        print(string.format("[Replay] Log #%d %s: InvokeServer trả về %s", logNo, name, tostring(result)))
+        label.Text = string.format("Log #%d: %s — đã phản hồi", logNo, name)
+    else
+        print(string.format("[Replay] Log #%d %s: đã gửi (FireServer không có xác nhận)", logNo, name))
+        label.Text = string.format("Log #%d: %s — đã gửi", logNo, name)
+    end
+    task.wait(delayBetween)
+    return not stopped
+end
+
+task.spawn(function()
+    -- Original Log #1: Click
+    do
+        local args = {
+    [1] = 1795776031.8985143
+        }
+        local okToContinue = runStep(1, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #2: Click
+    do
+        local args = {
+    [1] = 1795776035.9794595
+        }
+        local okToContinue = runStep(2, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #3: Click
+    do
+        local args = {
+    [1] = 1795776037.7173684
+        }
+        local okToContinue = runStep(3, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #4: ChooseModifiers
+    do
+        local args = {
+    [2] = true
+        }
+        local okToContinue = runStep(4, 'ChooseModifiers', args, function(a)
+            return game:GetService("ReplicatedStorage").Remotes.CullingGames.ChooseModifiers:FireServer(unpackArgs(a, 2))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #5: Click
+    do
+        local args = {
+    [1] = 1795776042.512296
+        }
+        local okToContinue = runStep(5, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #6: Click
+    do
+        local args = {
+    [1] = 1795776043.0338523
+        }
+        local okToContinue = runStep(6, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #7: Click
+    do
+        local args = {
+    [1] = 1795776043.7974157
+        }
+        local okToContinue = runStep(7, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #8: Click
+    do
+        local args = {
+    [1] = 1795776043.9044416
+        }
+        local okToContinue = runStep(8, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #9: Click
+    do
+        local args = {
+    [1] = 1795776044.974362
+        }
+        local okToContinue = runStep(9, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #10: Click
+    do
+        local args = {
+    [1] = 1795776045.148629
+        }
+        local okToContinue = runStep(10, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #11: Click
+    do
+        local args = {
+    [1] = 1795776046.3426204
+        }
+        local okToContinue = runStep(11, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #12: Click
+    do
+        local args = {
+    [1] = 1795776047.3429146
+        }
+        local okToContinue = runStep(12, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #13: Click
+    do
+        local args = {
+    [1] = 1795776049.347765
+        }
+        local okToContinue = runStep(13, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #14: SpawnNewTower
+    do
+        local args = {
+    [1] = "3a4f9c5c-dcfc-46aa-ad1e-be37e88c9c66",
+    [2] = CFrame.new(8.262408256530762, 47.32311248779297, -121.61992645263672) * CFrame.Angles(-3.1415927410125732, -8.742277657347586e-08, -3.1415927410125732)
+        }
+        local okToContinue = runStep(14, 'SpawnNewTower', args, function(a)
+            return game:GetService("ReplicatedStorage").Functions.SpawnNewTower:InvokeServer(unpackArgs(a, 2))
+        end, true)
+        if not okToContinue then return end
+    end
+    -- Original Log #15: Click
+    do
+        local args = {
+    [1] = 1795776049.5047958
+        }
+        local okToContinue = runStep(15, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #16: Click
+    do
+        local args = {
+    [1] = 1795776050.5058165
+        }
+        local okToContinue = runStep(16, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #17: Click
+    do
+        local args = {
+    [1] = 1795776051.1710992
+        }
+        local okToContinue = runStep(17, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #18: Click
+    do
+        local args = {
+    [1] = 1795776051.6518397
+        }
+        local okToContinue = runStep(18, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #19: Click
+    do
+        local args = {
+    [1] = 1795776052.9089754
+        }
+        local okToContinue = runStep(19, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #20: SpawnNewTower
+    do
+        local args = {
+    [1] = "be8f9440-55fc-4aa6-9317-0b5581a076f6",
+    [2] = CFrame.new(-27.1146297454834, 47.150733947753906, -116.95880889892578) * CFrame.Angles(-3.1415927410125732, -8.742277657347586e-08, -3.1415927410125732)
+        }
+        local okToContinue = runStep(20, 'SpawnNewTower', args, function(a)
+            return game:GetService("ReplicatedStorage").Functions.SpawnNewTower:InvokeServer(unpackArgs(a, 2))
+        end, true)
+        if not okToContinue then return end
+    end
+    -- Original Log #21: Click
+    do
+        local args = {
+    [1] = 1795776053.108154
+        }
+        local okToContinue = runStep(21, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #22: Click
+    do
+        local args = {
+    [1] = 1795776057.442975
+        }
+        local okToContinue = runStep(22, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #23: Click
+    do
+        local args = {
+    [1] = 1795776062.6117837
+        }
+        local okToContinue = runStep(23, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #24: Click
+    do
+        local args = {
+    [1] = 1795776066.482757
+        }
+        local okToContinue = runStep(24, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #25: Click
+    do
+        local args = {
+    [1] = 1795776066.9880066
+        }
+        local okToContinue = runStep(25, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #26: SpawnNewTower
+    do
+        local args = {
+    [1] = "be8f9440-55fc-4aa6-9317-0b5581a076f6",
+    [2] = CFrame.new(-16.56871223449707, 47.150733947753906, -116.2430419921875) * CFrame.Angles(-3.1415927410125732, -8.742277657347586e-08, -3.1415927410125732)
+        }
+        local okToContinue = runStep(26, 'SpawnNewTower', args, function(a)
+            return game:GetService("ReplicatedStorage").Functions.SpawnNewTower:InvokeServer(unpackArgs(a, 2))
+        end, true)
+        if not okToContinue then return end
+    end
+    -- Original Log #27: Click
+    do
+        local args = {
+    [1] = 1795776067.1350648
+        }
+        local okToContinue = runStep(27, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #28: Click
+    do
+        local args = {
+    [1] = 1795776067.9802942
+        }
+        local okToContinue = runStep(28, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #29: Click
+    do
+        local args = {
+    [1] = 1795776069.0340521
+        }
+        local okToContinue = runStep(29, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #30: Click
+    do
+        local args = {
+    [1] = 1795776069.5574899
+        }
+        local okToContinue = runStep(30, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #31: SpawnNewTower
+    do
+        local args = {
+    [1] = "be8f9440-55fc-4aa6-9317-0b5581a076f6",
+    [2] = CFrame.new(-20.544069290161133, 47.150733947753906, -122.1485824584961) * CFrame.Angles(-3.1415927410125732, -8.742277657347586e-08, -3.1415927410125732)
+        }
+        local okToContinue = runStep(31, 'SpawnNewTower', args, function(a)
+            return game:GetService("ReplicatedStorage").Functions.SpawnNewTower:InvokeServer(unpackArgs(a, 2))
+        end, true)
+        if not okToContinue then return end
+    end
+    -- Original Log #32: Click
+    do
+        local args = {
+    [1] = 1795776069.7131572
+        }
+        local okToContinue = runStep(32, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #33: Click
+    do
+        local args = {
+    [1] = 1795776070.8730445
+        }
+        local okToContinue = runStep(33, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #34: Click
+    do
+        local args = {
+    [1] = 1795776071.4282758
+        }
+        local okToContinue = runStep(34, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #35: Click
+    do
+        local args = {
+    [1] = 1795776073.1550148
+        }
+        local okToContinue = runStep(35, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #36: Click
+    do
+        local args = {
+    [1] = 1795776077.3506708
+        }
+        local okToContinue = runStep(36, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #37: Click
+    do
+        local args = {
+    [1] = 1795776077.7770314
+        }
+        local okToContinue = runStep(37, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #38: Click
+    do
+        local args = {
+    [1] = 1795776079.6201377
+        }
+        local okToContinue = runStep(38, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #39: Click
+    do
+        local args = {
+    [1] = 1795776080.13838
+        }
+        local okToContinue = runStep(39, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #40: SpawnNewTower
+    do
+        local args = {
+    [1] = "be8f9440-55fc-4aa6-9317-0b5581a076f6",
+    [2] = CFrame.new(-10.567028045654297, 47.150733947753906, -119.81156921386719) * CFrame.Angles(-3.1415927410125732, -8.742277657347586e-08, -3.1415927410125732)
+        }
+        local okToContinue = runStep(40, 'SpawnNewTower', args, function(a)
+            return game:GetService("ReplicatedStorage").Functions.SpawnNewTower:InvokeServer(unpackArgs(a, 2))
+        end, true)
+        if not okToContinue then return end
+    end
+    -- Original Log #41: Click
+    do
+        local args = {
+    [1] = 1795776080.2638054
+        }
+        local okToContinue = runStep(41, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #42: Click
+    do
+        local args = {
+    [1] = 1795776080.9203737
+        }
+        local okToContinue = runStep(42, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #43: UpgradeTower
+    do
+        local args = {
+    [1] = workspace.Towers.SorcererAgent
+        }
+        local okToContinue = runStep(43, 'UpgradeTower', args, function(a)
+            return game:GetService("ReplicatedStorage").Functions.UpgradeTower:InvokeServer(unpackArgs(a, 1))
+        end, true)
+        if not okToContinue then return end
+    end
+    -- Original Log #44: Click
+    do
+        local args = {
+    [1] = 1795776082.7340531
+        }
+        local okToContinue = runStep(44, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #45: Click
+    do
+        local args = {
+    [1] = 1795776089.0281296
+        }
+        local okToContinue = runStep(45, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #46: Click
+    do
+        local args = {
+    [1] = 1795776101.4056246
+        }
+        local okToContinue = runStep(46, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #47: Click
+    do
+        local args = {
+    [1] = 1795776110.420059
+        }
+        local okToContinue = runStep(47, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #48: Click
+    do
+        local args = {
+    [1] = 1795776112.4095879
+        }
+        local okToContinue = runStep(48, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #49: Click
+    do
+        local args = {
+    [1] = 1795776113.353707
+        }
+        local okToContinue = runStep(49, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #50: Click
+    do
+        local args = {
+    [1] = 1795776113.4869797
+        }
+        local okToContinue = runStep(50, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #51: Click
+    do
+        local args = {
+    [1] = 1795776114.0099466
+        }
+        local okToContinue = runStep(51, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #52: SpawnNewTower
+    do
+        local args = {
+    [1] = "348f2cd1-e2e9-48c8-a13b-589f09bc0654",
+    [2] = CFrame.new(20.773820877075195, 47.150047302246094, -117.64314270019531) * CFrame.Angles(-3.1415927410125732, -8.742277657347586e-08, -3.1415927410125732)
+        }
+        local okToContinue = runStep(52, 'SpawnNewTower', args, function(a)
+            return game:GetService("ReplicatedStorage").Functions.SpawnNewTower:InvokeServer(unpackArgs(a, 2))
+        end, true)
+        if not okToContinue then return end
+    end
+    -- Original Log #53: Click
+    do
+        local args = {
+    [1] = 1795776114.167487
+        }
+        local okToContinue = runStep(53, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #54: Click
+    do
+        local args = {
+    [1] = 1795776114.6718047
+        }
+        local okToContinue = runStep(54, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #55: Click
+    do
+        local args = {
+    [1] = 1795776115.7618139
+        }
+        local okToContinue = runStep(55, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #56: Click
+    do
+        local args = {
+    [1] = 1795776115.9763157
+        }
+        local okToContinue = runStep(56, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #57: Click
+    do
+        local args = {
+    [1] = 1795776118.0950136
+        }
+        local okToContinue = runStep(57, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #58: Click
+    do
+        local args = {
+    [1] = 1795776118.1941068
+        }
+        local okToContinue = runStep(58, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #59: Click
+    do
+        local args = {
+    [1] = 1795776119.0986364
+        }
+        local okToContinue = runStep(59, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #60: Click
+    do
+        local args = {
+    [1] = 1795776119.244779
+        }
+        local okToContinue = runStep(60, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #61: SellTower
+    do
+        local args = {
+    [1] = workspace.Towers.FingerBearerAwk
+        }
+        local okToContinue = runStep(61, 'SellTower', args, function(a)
+            return game:GetService("ReplicatedStorage").Functions.SellTower:InvokeServer(unpackArgs(a, 1))
+        end, true)
+        if not okToContinue then return end
+    end
+    -- Original Log #62: Click
+    do
+        local args = {
+    [1] = 1795776121.287994
+        }
+        local okToContinue = runStep(62, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #63: Click
+    do
+        local args = {
+    [1] = 1795776121.3784404
+        }
+        local okToContinue = runStep(63, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #64: Click
+    do
+        local args = {
+    [1] = 1795776122.5060065
+        }
+        local okToContinue = runStep(64, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #65: Click
+    do
+        local args = {
+    [1] = 1795776122.677965
+        }
+        local okToContinue = runStep(65, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #66: Click
+    do
+        local args = {
+    [1] = 1795776123.4003065
+        }
+        local okToContinue = runStep(66, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #67: UpgradeTower
+    do
+        local args = {
+    [1] = workspace.Towers.SorcererAgent
+        }
+        local okToContinue = runStep(67, 'UpgradeTower', args, function(a)
+            return game:GetService("ReplicatedStorage").Functions.UpgradeTower:InvokeServer(unpackArgs(a, 1))
+        end, true)
+        if not okToContinue then return end
+    end
+    -- Original Log #68: Click
+    do
+        local args = {
+    [1] = 1795776124.9836125
+        }
+        local okToContinue = runStep(68, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #69: Click
+    do
+        local args = {
+    [1] = 1795776125.1465364
+        }
+        local okToContinue = runStep(69, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #70: UpgradeTower
+    do
+        local args = {
+    [1] = workspace.Towers.SorcererAgent
+        }
+        local okToContinue = runStep(70, 'UpgradeTower', args, function(a)
+            return game:GetService("ReplicatedStorage").Functions.UpgradeTower:InvokeServer(unpackArgs(a, 1))
+        end, true)
+        if not okToContinue then return end
+    end
+    -- Original Log #71: Click
+    do
+        local args = {
+    [1] = 1795776126.5904155
+        }
+        local okToContinue = runStep(71, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #72: Click
+    do
+        local args = {
+    [1] = 1795776128.2465873
+        }
+        local okToContinue = runStep(72, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #73: Click
+    do
+        local args = {
+    [1] = 1795776128.470305
+        }
+        local okToContinue = runStep(73, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #74: Click
+    do
+        local args = {
+    [1] = 1795776129.2363324
+        }
+        local okToContinue = runStep(74, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #75: Click
+    do
+        local args = {
+    [1] = 1795776129.3574004
+        }
+        local okToContinue = runStep(75, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #76: UpgradeTower
+    do
+        local args = {
+    [1] = workspace.Towers.SorcererAgent
+        }
+        local okToContinue = runStep(76, 'UpgradeTower', args, function(a)
+            return game:GetService("ReplicatedStorage").Functions.UpgradeTower:InvokeServer(unpackArgs(a, 1))
+        end, true)
+        if not okToContinue then return end
+    end
+    -- Original Log #77: UpgradeTower
+    do
+        local args = {
+    [1] = workspace.Towers.SorcererAgent2
+        }
+        local okToContinue = runStep(77, 'UpgradeTower', args, function(a)
+            return game:GetService("ReplicatedStorage").Functions.UpgradeTower:InvokeServer(unpackArgs(a, 1))
+        end, true)
+        if not okToContinue then return end
+    end
+    -- Original Log #78: Click
+    do
+        local args = {
+    [1] = 1795776154.1890538
+        }
+        local okToContinue = runStep(78, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #79: Click
+    do
+        local args = {
+    [1] = 1795776155.4943638
+        }
+        local okToContinue = runStep(79, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #80: Click
+    do
+        local args = {
+    [1] = 1795776155.8268585
+        }
+        local okToContinue = runStep(80, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #81: Click
+    do
+        local args = {
+    [1] = 1795776156.5691557
+        }
+        local okToContinue = runStep(81, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #82: Click
+    do
+        local args = {
+    [1] = 1795776159.7473252
+        }
+        local okToContinue = runStep(82, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #83: Click
+    do
+        local args = {
+    [1] = 1795776178.7022278
+        }
+        local okToContinue = runStep(83, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #84: Click
+    do
+        local args = {
+    [1] = 1795776179.4472914
+        }
+        local okToContinue = runStep(84, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #85: Click
+    do
+        local args = {
+    [1] = 1795776180.0881872
+        }
+        local okToContinue = runStep(85, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #86: Click
+    do
+        local args = {
+    [1] = 1795776191.9197125
+        }
+        local okToContinue = runStep(86, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #87: Click
+    do
+        local args = {
+    [1] = 1795776193.0510864
+        }
+        local okToContinue = runStep(87, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #88: Click
+    do
+        local args = {
+    [1] = 1795776193.6546276
+        }
+        local okToContinue = runStep(88, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #89: Click
+    do
+        local args = {
+    [1] = 1795776193.7953007
+        }
+        local okToContinue = runStep(89, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #90: Click
+    do
+        local args = {
+    [1] = 1795776194.4402235
+        }
+        local okToContinue = runStep(90, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #91: Click
+    do
+        local args = {
+    [1] = 1795776195.3301618
+        }
+        local okToContinue = runStep(91, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #92: Click
+    do
+        local args = {
+    [1] = 1795776195.5074222
+        }
+        local okToContinue = runStep(92, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #93: SpawnNewTower
+    do
+        local args = {
+    [1] = "27708a41-c9bf-4bb6-9985-f1c38d08b11e",
+    [2] = CFrame.new(28.2958927154541, 47.16230010986328, -117.83293151855469) * CFrame.Angles(-3.1415927410125732, -8.742277657347586e-08, -3.1415927410125732)
+        }
+        local okToContinue = runStep(93, 'SpawnNewTower', args, function(a)
+            return game:GetService("ReplicatedStorage").Functions.SpawnNewTower:InvokeServer(unpackArgs(a, 2))
+        end, true)
+        if not okToContinue then return end
+    end
+    -- Original Log #94: Click
+    do
+        local args = {
+    [1] = 1795776195.6521952
+        }
+        local okToContinue = runStep(94, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #95: Click
+    do
+        local args = {
+    [1] = 1795776214.8573844
+        }
+        local okToContinue = runStep(95, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #96: Click
+    do
+        local args = {
+    [1] = 1795776215.5050273
+        }
+        local okToContinue = runStep(96, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #97: Click
+    do
+        local args = {
+    [1] = 1795776215.9431062
+        }
+        local okToContinue = runStep(97, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #98: Click
+    do
+        local args = {
+    [1] = 1795776216.1702006
+        }
+        local okToContinue = runStep(98, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #99: Click
+    do
+        local args = {
+    [1] = 1795776216.849126
+        }
+        local okToContinue = runStep(99, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #100: Click
+    do
+        local args = {
+    [1] = 1795776216.9624863
+        }
+        local okToContinue = runStep(100, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #101: UpgradeTower
+    do
+        local args = {
+    [1] = workspace.Towers.SorcererAgent2
+        }
+        local okToContinue = runStep(101, 'UpgradeTower', args, function(a)
+            return game:GetService("ReplicatedStorage").Functions.UpgradeTower:InvokeServer(unpackArgs(a, 1))
+        end, true)
+        if not okToContinue then return end
+    end
+    -- Original Log #102: Click
+    do
+        local args = {
+    [1] = 1795776218.1355789
+        }
+        local okToContinue = runStep(102, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #103: Click
+    do
+        local args = {
+    [1] = 1795776218.8041897
+        }
+        local okToContinue = runStep(103, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #104: Click
+    do
+        local args = {
+    [1] = 1795776218.9646869
+        }
+        local okToContinue = runStep(104, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #105: UpgradeTower
+    do
+        local args = {
+    [1] = workspace.Towers.SorcererAgent2
+        }
+        local okToContinue = runStep(105, 'UpgradeTower', args, function(a)
+            return game:GetService("ReplicatedStorage").Functions.UpgradeTower:InvokeServer(unpackArgs(a, 1))
+        end, true)
+        if not okToContinue then return end
+    end
+    -- Original Log #106: Click
+    do
+        local args = {
+    [1] = 1795776220.295308
+        }
+        local okToContinue = runStep(106, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #107: Click
+    do
+        local args = {
+    [1] = 1795776220.9114313
+        }
+        local okToContinue = runStep(107, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #108: Click
+    do
+        local args = {
+    [1] = 1795776220.9122963
+        }
+        local okToContinue = runStep(108, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #109: Click
+    do
+        local args = {
+    [1] = 1795776222.7494407
+        }
+        local okToContinue = runStep(109, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #110: Click
+    do
+        local args = {
+    [1] = 1795776223.0939982
+        }
+        local okToContinue = runStep(110, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #111: Click
+    do
+        local args = {
+    [1] = 1795776224.3567414
+        }
+        local okToContinue = runStep(111, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #112: Click
+    do
+        local args = {
+    [1] = 1795776224.4790103
+        }
+        local okToContinue = runStep(112, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #113: Click
+    do
+        local args = {
+    [1] = 1795776225.0614395
+        }
+        local okToContinue = runStep(113, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #114: Click
+    do
+        local args = {
+    [1] = 1795776236.0552163
+        }
+        local okToContinue = runStep(114, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #115: Click
+    do
+        local args = {
+    [1] = 1795776236.6452963
+        }
+        local okToContinue = runStep(115, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #116: Click
+    do
+        local args = {
+    [1] = 1795776236.9895358
+        }
+        local okToContinue = runStep(116, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #117: Click
+    do
+        local args = {
+    [1] = 1795776238.2276998
+        }
+        local okToContinue = runStep(117, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #118: Click
+    do
+        local args = {
+    [1] = 1795776238.3671432
+        }
+        local okToContinue = runStep(118, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #119: UpgradeTower
+    do
+        local args = {
+    [1] = workspace.Towers.SorcererAgent3
+        }
+        local okToContinue = runStep(119, 'UpgradeTower', args, function(a)
+            return game:GetService("ReplicatedStorage").Functions.UpgradeTower:InvokeServer(unpackArgs(a, 1))
+        end, true)
+        if not okToContinue then return end
+    end
+    -- Original Log #120: Click
+    do
+        local args = {
+    [1] = 1795776240.2133973
+        }
+        local okToContinue = runStep(120, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #121: Click
+    do
+        local args = {
+    [1] = 1795776240.354802
+        }
+        local okToContinue = runStep(121, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #122: UpgradeTower
+    do
+        local args = {
+    [1] = workspace.Towers.SorcererAgent3
+        }
+        local okToContinue = runStep(122, 'UpgradeTower', args, function(a)
+            return game:GetService("ReplicatedStorage").Functions.UpgradeTower:InvokeServer(unpackArgs(a, 1))
+        end, true)
+        if not okToContinue then return end
+    end
+    -- Original Log #123: Click
+    do
+        local args = {
+    [1] = 1795776241.8235917
+        }
+        local okToContinue = runStep(123, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #124: Click
+    do
+        local args = {
+    [1] = 1795776241.9772465
+        }
+        local okToContinue = runStep(124, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #125: UpgradeTower
+    do
+        local args = {
+    [1] = workspace.Towers.SorcererAgent2
+        }
+        local okToContinue = runStep(125, 'UpgradeTower', args, function(a)
+            return game:GetService("ReplicatedStorage").Functions.UpgradeTower:InvokeServer(unpackArgs(a, 1))
+        end, true)
+        if not okToContinue then return end
+    end
+    -- Original Log #126: Click
+    do
+        local args = {
+    [1] = 1795776243.2919192
+        }
+        local okToContinue = runStep(126, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #127: Click
+    do
+        local args = {
+    [1] = 1795776243.7952607
+        }
+        local okToContinue = runStep(127, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #128: Click
+    do
+        local args = {
+    [1] = 1795776243.9253428
+        }
+        local okToContinue = runStep(128, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #129: UpgradeTower
+    do
+        local args = {
+    [1] = workspace.Towers.SorcererAgent3
+        }
+        local okToContinue = runStep(129, 'UpgradeTower', args, function(a)
+            return game:GetService("ReplicatedStorage").Functions.UpgradeTower:InvokeServer(unpackArgs(a, 1))
+        end, true)
+        if not okToContinue then return end
+    end
+    -- Original Log #130: Click
+    do
+        local args = {
+    [1] = 1795776245.2463496
+        }
+        local okToContinue = runStep(130, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #131: Click
+    do
+        local args = {
+    [1] = 1795776246.0812056
+        }
+        local okToContinue = runStep(131, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #132: Click
+    do
+        local args = {
+    [1] = 1795776247.3073268
+        }
+        local okToContinue = runStep(132, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #133: Click
+    do
+        local args = {
+    [1] = 1795776247.4377525
+        }
+        local okToContinue = runStep(133, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #134: Click
+    do
+        local args = {
+    [1] = 1795776249.0475533
+        }
+        local okToContinue = runStep(134, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #135: Click
+    do
+        local args = {
+    [1] = 1795776249.4625564
+        }
+        local okToContinue = runStep(135, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #136: Click
+    do
+        local args = {
+    [1] = 1795776249.6042476
+        }
+        local okToContinue = runStep(136, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #137: Click
+    do
+        local args = {
+    [1] = 1795776250.529197
+        }
+        local okToContinue = runStep(137, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #138: Click
+    do
+        local args = {
+    [1] = 1795776250.584829
+        }
+        local okToContinue = runStep(138, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #139: Click
+    do
+        local args = {
+    [1] = 1795776251.2298799
+        }
+        local okToContinue = runStep(139, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #140: Click
+    do
+        local args = {
+    [1] = 1795776251.3505795
+        }
+        local okToContinue = runStep(140, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #141: Click
+    do
+        local args = {
+    [1] = 1795776252.056061
+        }
+        local okToContinue = runStep(141, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #142: Click
+    do
+        local args = {
+    [1] = 1795776252.1898088
+        }
+        local okToContinue = runStep(142, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #143: UpgradeTower
+    do
+        local args = {
+    [1] = workspace.Towers.SorcererAgent3
+        }
+        local okToContinue = runStep(143, 'UpgradeTower', args, function(a)
+            return game:GetService("ReplicatedStorage").Functions.UpgradeTower:InvokeServer(unpackArgs(a, 1))
+        end, true)
+        if not okToContinue then return end
+    end
+    -- Original Log #144: Click
+    do
+        local args = {
+    [1] = 1795776253.299288
+        }
+        local okToContinue = runStep(144, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #145: Click
+    do
+        local args = {
+    [1] = 1795776254.5130327
+        }
+        local okToContinue = runStep(145, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #146: Click
+    do
+        local args = {
+    [1] = 1795776255.1082149
+        }
+        local okToContinue = runStep(146, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #147: Click
+    do
+        local args = {
+    [1] = 1795776306.4677505
+        }
+        local okToContinue = runStep(147, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #148: Click
+    do
+        local args = {
+    [1] = 1795776326.6485167
+        }
+        local okToContinue = runStep(148, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #149: Click
+    do
+        local args = {
+    [1] = 1795776326.88993
+        }
+        local okToContinue = runStep(149, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #150: UpgradeTower
+    do
+        local args = {
+    [1] = workspace.Towers.RedScarfSorcererAwk
+        }
+        local okToContinue = runStep(150, 'UpgradeTower', args, function(a)
+            return game:GetService("ReplicatedStorage").Functions.UpgradeTower:InvokeServer(unpackArgs(a, 1))
+        end, true)
+        if not okToContinue then return end
+    end
+    -- Original Log #151: Click
+    do
+        local args = {
+    [1] = 1795776330.382588
+        }
+        local okToContinue = runStep(151, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #152: Click
+    do
+        local args = {
+    [1] = 1795776330.7027056
+        }
+        local okToContinue = runStep(152, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #153: UpgradeTower
+    do
+        local args = {
+    [1] = workspace.Towers.SoulCurse
+        }
+        local okToContinue = runStep(153, 'UpgradeTower', args, function(a)
+            return game:GetService("ReplicatedStorage").Functions.UpgradeTower:InvokeServer(unpackArgs(a, 1))
+        end, true)
+        if not okToContinue then return end
+    end
+    -- Original Log #154: UpgradeTower
+    do
+        local args = {
+    [1] = workspace.Towers.SoulCurse2
+        }
+        local okToContinue = runStep(154, 'UpgradeTower', args, function(a)
+            return game:GetService("ReplicatedStorage").Functions.UpgradeTower:InvokeServer(unpackArgs(a, 1))
+        end, true)
+        if not okToContinue then return end
+    end
+    -- Original Log #155: Click
+    do
+        local args = {
+    [1] = 1795776362.771869
+        }
+        local okToContinue = runStep(155, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #156: Click
+    do
+        local args = {
+    [1] = 1795776363.4864748
+        }
+        local okToContinue = runStep(156, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    -- Original Log #157: Click
+    do
+        local args = {
+    [1] = 1795776364.686735
+        }
+        local okToContinue = runStep(157, 'Click', args, function(a)
+            return game:GetService("Players").LocalPlayer.QTE.Click:FireServer(unpackArgs(a, 1))
+        end, false)
+        if not okToContinue then return end
+    end
+    if stopped then
+        label.Text = "Đã dừng theo yêu cầu / do lỗi"
+        return
+    end
+    label.Text = "Đã gửi hết 157 Log theo thứ tự #1 → #157"
+    print("[Replay] Hoàn tất gửi đủ 157 log theo thứ tự gốc.")
+end)
