@@ -1,1 +1,0 @@
-/mnt/data/culling_auto_hub_v5.lua
