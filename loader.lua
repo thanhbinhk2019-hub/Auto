@@ -1,1 +1,1 @@
-loadstring(game:HttpGet("https://raw.githubusercontent.com/thanhbinhk2019-hub/Auto/main/culling_auto_hub.lua"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/thanhbinhk2019-hub/Auto/main/culling_auto_hub_v5.lua"))()
