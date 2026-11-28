@@ -28,6 +28,10 @@ local CFG = {
 	START_REMOTE_GAP = 0.5,
 	LOOP_TICK = 0.35,
 
+	BOOT_WAIT = 8,       -- mới chạy script: chờ từng này giây xem có phải đang trong trận rồi mới TP ở sảnh
+	MOD_WAIT = 3,        -- không đọc được wave quá từng này giây thì gửi lệnh chọn modifier
+	MOD_RETRY = 2,       -- gửi lại mỗi từng này giây cho tới khi đọc được wave
+
 	WAVE_CONFIRM_READS = 4,  -- đọc cùng 1 tổng wave đủ số lần này mới chốt (tránh đọc nhầm lúc load)
 	LOBBY_CONFIRM_TIME = 10, -- đã chốt script win thì phải thấy sảnh liên tục từng này giây mới reset
 	SHUTDOWN_DELAY = 3,      -- wave lạ: hiện thông báo từng này giây rồi tự tắt
@@ -104,6 +108,12 @@ end
 local function parseWaveText(txt, strictPairOnly)
 	if typeof(txt) ~= "string" or txt == "" then return nil, nil end
 	local s = normalizeWaveText(txt)
+
+	-- chữ phần thưởng / thành tích, không phải bộ đếm wave của trận
+	local low = txt:lower()
+	if low:find("waves") or low:find("reward") or low:find("beaten") then
+		return nil, nil
+	end
 
 	local cur, total = s:match("wave%s*:?%s*(%d+)%s*/%s*(%d+)")
 	if cur then
@@ -357,6 +367,16 @@ local function fireStartRemotes()
 		end
 	end
 	return sent
+end
+
+-- Màn 10 wave phải chọn modifier xong game mới hiện số wave
+local function fireModifier()
+	pcall(function()
+		local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+		local cg = remotes and remotes:FindFirstChild("CullingGames")
+		local cm = cg and cg:FindFirstChild("ChooseModifiers")
+		if cm then cm:FireServer(1, false) end
+	end)
 end
 
 -- ================= 5. BỘ CHẠY SCRIPT WIN =================
@@ -842,6 +862,8 @@ task.spawn(function()
 	local seenMax, seenCount = nil, 0
 	local lobbySince = nil
 	local lastError = nil
+	local startedAt = os.clock()
+	local noWaveSince, lastModifier = nil, 0
 
 	local function resetMatch()
 		if winCtx then winCtx.dead = true end
@@ -856,6 +878,17 @@ task.spawn(function()
 			local env = detectEnvironment()
 			modeLbl.Text = env == "LOBBY" and "Vị trí: Ở SẢNH" or "Vị trí: TRONG TRẬN"
 
+			local _, totalNow = getCurrentWave()
+			if chosenMax or (totalNow and totalNow > 0) then
+				noWaveSince = nil
+			else
+				noWaveSince = noWaveSince or os.clock()
+				if os.clock() - noWaveSince >= CFG.MOD_WAIT and os.clock() - lastModifier >= CFG.MOD_RETRY then
+					lastModifier = os.clock()
+					fireModifier()
+				end
+			end
+
 			if env == "LOBBY" then
 				-- Đang chạy trận mà UI wave ẩn chốc lát: chưa reset, tránh chạy trùng script win
 				if chosenMax then
@@ -864,6 +897,11 @@ task.spawn(function()
 				end
 				resetMatch()
 				stageLbl.Text = "Màn: Đợi vào trận mới quét..."
+
+				if os.clock() - startedAt < CFG.BOOT_WAIT then
+					setAction("Đang kiểm tra đang ở sảnh hay trong trận...")
+					return
+				end
 
 				local _, root = getCharacterAndParts()
 				if not root then
